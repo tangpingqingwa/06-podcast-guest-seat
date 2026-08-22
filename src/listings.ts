@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AppDb } from "./db.js";
+import { canonicalizeSiteUrl } from "./hygiene.js";
 
 const MAX_ONE_LINER = 140;
 
@@ -62,7 +63,7 @@ export function siteIdentity(siteUrl: string): string {
 export function insertListing(db: AppDb, input: InsertListingInput): Listing {
   const episodeId = input.episodeId.trim();
   const name = input.name.trim();
-  const siteUrl = input.siteUrl.trim();
+  const siteUrl = canonicalizeSiteUrl(input.siteUrl);
   const oneLiner = input.oneLiner.trim();
   const firstBidAt = input.firstBidAt.trim();
   const paidAt = input.paidAt.trim();
@@ -72,9 +73,6 @@ export function insertListing(db: AppDb, input: InsertListingInput): Listing {
   }
   if (!name) {
     throw new Error("name is required");
-  }
-  if (!siteUrl) {
-    throw new Error("siteUrl is required");
   }
   if (!oneLiner) {
     throw new Error("oneLiner is required");
@@ -142,6 +140,19 @@ export function getListing(db: AppDb, id: string): Listing | undefined {
     )
     .get(id);
   return row ? mapListing(row) : undefined;
+}
+
+export function incrementListingClicks(
+  db: AppDb,
+  id: string,
+): Listing | undefined {
+  const result = db
+    .prepare("UPDATE listings SET clicks = clicks + 1 WHERE id = ?")
+    .run(id);
+  if (result.changes === 0) {
+    return undefined;
+  }
+  return getListing(db, id);
 }
 
 export function listListingsForEpisode(db: AppDb, episodeId: string): Listing[] {
