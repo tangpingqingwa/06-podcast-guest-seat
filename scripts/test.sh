@@ -91,9 +91,18 @@ if [[ -f package.json ]]; then
     fi
   fi
 
-  unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ACCESS_TOKEN
+  unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET
   export POLAR_FIXTURE_ONLY=1
   [[ "${POLAR_LIVE:-}" != "1" ]] || fail "POLAR_LIVE must stay unset in test.sh"
+  [[ "${POLAR_FIXTURE_ONLY}" == "1" ]] || fail "POLAR_FIXTURE_ONLY must be 1 in test.sh"
+
+  echo "== healthz source =="
+  [[ -f src/app.ts ]] || fail "missing src/app.ts"
+  [[ -f src/server.ts ]] || fail "missing src/server.ts"
+  [[ -f src/http/routes/health.ts ]] || fail "missing src/http/routes/health.ts"
+  grep -q '/healthz' src/http/routes/health.ts || fail "health route missing /healthz"
+  grep -q 'ok: true' src/http/routes/health.ts || fail "health route missing { ok: true }"
+  [[ -f tests/health.test.ts ]] || fail "missing tests/health.test.ts"
 
   echo "== tsc --noEmit =="
   npx tsc --noEmit
@@ -108,6 +117,10 @@ if [[ -f package.json ]]; then
   [[ $test_status -eq 0 ]] || fail "unit tests failed"
   grep -Eq 'tests[[:space:]]+[1-9][0-9]*' "$test_log" \
     || fail "test runner reported 0 tests"
+  grep -q '/healthz' "$test_log" || fail "healthz test did not run"
+  if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
+    fail "unit tests must not call live Polar hosts"
+  fi
 fi
 
 echo "OK: buildable and testable"
