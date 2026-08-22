@@ -104,6 +104,26 @@ if [[ -f package.json ]]; then
   grep -q 'ok: true' src/http/routes/health.ts || fail "health route missing { ok: true }"
   [[ -f tests/health.test.ts ]] || fail "missing tests/health.test.ts"
 
+  echo "== episodes + listings source =="
+  for f in src/db.ts src/episodes.ts src/listings.ts src/migrations/001_init.sql \
+    tests/episode.test.ts; do
+    [[ -f "$f" ]] || fail "missing $f"
+    [[ -s "$f" ]] || fail "empty $f"
+  done
+  grep -q 'CREATE TABLE episodes' src/migrations/001_init.sql \
+    || fail "episodes table missing from 001_init.sql"
+  grep -q 'CREATE TABLE listings' src/migrations/001_init.sql \
+    || fail "listings table missing from 001_init.sql"
+  grep -q 'guest_seat' src/episodes.ts || fail "src/episodes.ts missing guest_seat"
+  grep -q 'sixty_second_open' src/episodes.ts \
+    || fail "src/episodes.ts missing sixty_second_open"
+  grep -q 'vetoEnabled' src/episodes.ts || fail "src/episodes.ts missing vetoEnabled"
+  grep -q 'oneLiner' src/listings.ts || fail "src/listings.ts missing oneLiner"
+  grep -q 'siteUrl' src/listings.ts || fail "src/listings.ts missing siteUrl"
+  if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
+    fail "src/tests must not hard-code polar.sh HTTP"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
@@ -118,6 +138,12 @@ if [[ -f package.json ]]; then
   grep -Eq 'tests[[:space:]]+[1-9][0-9]*' "$test_log" \
     || fail "test runner reported 0 tests"
   grep -q '/healthz' "$test_log" || fail "healthz test did not run"
+  grep -q 'new episode does not carry old bids' "$test_log" \
+    || fail "episode isolation test did not run"
+  grep -q 'guest-seat episode defaults vetoEnabled to true' "$test_log" \
+    || fail "guest_seat veto default test did not run"
+  grep -q '60-second episode defaults vetoEnabled to false' "$test_log" \
+    || fail "sixty_second_open veto default test did not run"
   if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
     fail "unit tests must not call live Polar hosts"
   fi
