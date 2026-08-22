@@ -124,6 +124,21 @@ if [[ -f package.json ]]; then
     fail "src/tests must not hard-code polar.sh HTTP"
   fi
 
+  echo "== rank engine source =="
+  for f in src/rank.ts tests/rank.test.ts; do
+    [[ -f "$f" ]] || fail "missing $f"
+    [[ -s "$f" ]] || fail "empty $f"
+  done
+  grep -q 'MIN_BID_USD' src/rank.ts || fail "src/rank.ts missing MIN_BID_USD"
+  grep -q 'firstBidAt' src/rank.ts || fail "src/rank.ts missing firstBidAt tie-break"
+  grep -q 'chargeUsd' src/rank.ts || fail "src/rank.ts missing raise chargeUsd"
+  grep -q 'full_bid_required' src/rank.ts \
+    || fail "src/rank.ts missing full-bid reject for other bidders"
+  grep -q 'rankListings' src/rank.ts || fail "src/rank.ts missing rankListings"
+  if grep -E 'PolarPort|/about|/rules|/go/' src/rank.ts >/dev/null; then
+    fail "rank engine must not add Polar or hygiene pages"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
@@ -144,6 +159,18 @@ if [[ -f package.json ]]; then
     || fail "guest_seat veto default test did not run"
   grep -q '60-second episode defaults vetoEnabled to false' "$test_log" \
     || fail "sixty_second_open veto default test did not run"
+  grep -q 'first bid $5 on empty guest-seat episode is rank #1 after payment' "$test_log" \
+    || fail "SPEC 1 rank test did not run"
+  grep -q 'bid $4 is rejected (min $5)' "$test_log" \
+    || fail "SPEC 2 rank test did not run"
+  grep -q 'two listings, $10 then $12' "$test_log" \
+    || fail "SPEC 3 rank test did not run"
+  grep -q 'older firstBidAt is #1' "$test_log" \
+    || fail "SPEC 4 rank test did not run"
+  grep -q 'raise own $10 to $13' "$test_log" \
+    || fail "SPEC 5 rank test did not run"
+  grep -q 'other bidder cannot pay only the $1 difference' "$test_log" \
+    || fail "SPEC 6 rank test did not run"
   if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
     fail "unit tests must not call live Polar hosts"
   fi
