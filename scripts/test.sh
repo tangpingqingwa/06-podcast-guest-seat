@@ -209,6 +209,42 @@ if [[ -f package.json ]]; then
     fail "veto/lock must stay offline (no live Polar)"
   fi
 
+  echo "== deploy artifacts (Dockerfile + runbook) =="
+  [[ -f Dockerfile ]] || fail "missing Dockerfile"
+  [[ -f .env.example ]] || fail "missing .env.example"
+  [[ -f deploy/runbook.md ]] || fail "missing deploy/runbook.md"
+  grep -q 'node:22' Dockerfile || fail "Dockerfile must use Node 22"
+  grep -qE '^USER[[:space:]]+node$' Dockerfile || fail "Dockerfile must run as non-root USER node"
+  grep -q 'PORT' Dockerfile || fail "Dockerfile must honor PORT"
+  grep -q 'src/server.ts' Dockerfile || fail "Dockerfile must start src/server.ts"
+  if grep -E 'POLAR_LIVE[[:space:]]*=[[:space:]]*(1|true|yes|on)' Dockerfile >/dev/null; then
+    fail "Dockerfile must not set POLAR_LIVE=1"
+  fi
+  if grep -E 'POLAR_(ACCESS_TOKEN|WEBHOOK_SECRET)[[:space:]]*=' Dockerfile >/dev/null; then
+    fail "Dockerfile must not bake Polar secrets"
+  fi
+  grep -q 'POLAR_LIVE' .env.example || fail ".env.example missing POLAR_LIVE"
+  grep -q 'POLAR_FIXTURE_ONLY' .env.example || fail ".env.example missing POLAR_FIXTURE_ONLY"
+  grep -q 'DATABASE_PATH' .env.example || fail ".env.example missing DATABASE_PATH"
+  grep -q 'HOST_SESSION_SECRET' .env.example || fail ".env.example missing HOST_SESSION_SECRET"
+  grep -q 'POLAR_ACCESS_TOKEN' .env.example || fail ".env.example missing POLAR_ACCESS_TOKEN"
+  grep -q 'POLAR_WEBHOOK_SECRET' .env.example || fail ".env.example missing POLAR_WEBHOOK_SECRET"
+  if grep -E '^[[:space:]]*POLAR_LIVE=1[[:space:]]*$' .env.example >/dev/null; then
+    fail ".env.example must not default POLAR_LIVE on"
+  fi
+  if grep -E '^[[:space:]]*POLAR_(ACCESS_TOKEN|WEBHOOK_SECRET)=' .env.example >/dev/null; then
+    fail ".env.example must keep Polar secrets commented"
+  fi
+  grep -q '/healthz' deploy/runbook.md || fail "runbook missing /healthz"
+  grep -q 'POLAR_LIVE=1' deploy/runbook.md || fail "runbook missing how to enable live Polar"
+  grep -q 'docker build' deploy/runbook.md || fail "runbook missing docker build"
+  grep -q 'docker run' deploy/runbook.md || fail "runbook missing docker run"
+  grep -q 'Caddy' deploy/runbook.md || fail "runbook missing Caddy"
+  grep -q 'guest seat' deploy/runbook.md || fail "runbook missing guest-seat product"
+  if grep -E 'POLAR_LIVE[[:space:]]*=[[:space:]]*1' .github/workflows/ci.yml >/dev/null; then
+    fail "CI must not set POLAR_LIVE=1"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
