@@ -91,7 +91,7 @@ if [[ -f package.json ]]; then
     fi
   fi
 
-  unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET
+  unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET HOST_SESSION_SECRET
   export POLAR_FIXTURE_ONLY=1
   [[ "${POLAR_LIVE:-}" != "1" ]] || fail "POLAR_LIVE must stay unset in test.sh"
   [[ "${POLAR_FIXTURE_ONLY}" == "1" ]] || fail "POLAR_FIXTURE_ONLY must be 1 in test.sh"
@@ -189,6 +189,26 @@ if [[ -f package.json ]]; then
     fail "src/tests must not hard-code polar.sh HTTP"
   fi
 
+  echo "== host veto + lock source =="
+  for f in src/veto.ts src/http/routes/host.ts tests/veto.test.ts; do
+    [[ -f "$f" ]] || fail "missing $f"
+    [[ -s "$f" ]] || fail "empty $f"
+  done
+  grep -q 'vetoListing' src/veto.ts || fail "src/veto.ts missing vetoListing"
+  grep -q 'lockEpisode' src/veto.ts || fail "src/veto.ts missing lockEpisode"
+  grep -q 'veto_disabled' src/veto.ts || fail "src/veto.ts missing veto_disabled"
+  grep -q 'veto_flag_frozen' src/veto.ts || fail "src/veto.ts missing veto_flag_frozen"
+  grep -q 'bookedGuest' src/veto.ts || fail "src/veto.ts missing bookedGuest"
+  grep -q '/host/veto' src/http/routes/host.ts || fail "host route missing /host/veto"
+  grep -q '/host/lock' src/http/routes/host.ts || fail "host route missing /host/lock"
+  grep -q 'HOST_SESSION_SECRET' src/http/routes/host.ts \
+    || fail "host route missing HOST_SESSION_SECRET"
+  grep -q 'hostRoutes' src/app.ts || fail "src/app.ts must register hostRoutes"
+  if grep -Eqi 'POLAR_LIVE=1|https?://([^/]*\.)?polar\.sh' src/veto.ts \
+    src/http/routes/host.ts tests/veto.test.ts; then
+    fail "veto/lock must stay offline (no live Polar)"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
@@ -239,6 +259,18 @@ if [[ -f package.json ]]; then
     || fail "SPEC 17 no-live-Polar test did not run"
   grep -q 'POLAR_FIXTURE_ONLY=1 wins' "$test_log" \
     || fail "POLAR_FIXTURE_ONLY wins test did not run"
+  grep -q 'guest-seat episode default flag is vetoEnabled === true' "$test_log" \
+    || fail "SPEC 10 guest-seat veto default test did not run"
+  grep -q '60-second episode default flag is vetoEnabled === false' "$test_log" \
+    || fail "SPEC 11 sixty-second veto default test did not run"
+  grep -q 'Veto #1 on guest seat' "$test_log" \
+    || fail "SPEC 12 veto #1 test did not run"
+  grep -q 'Veto when flag off is 403' "$test_log" \
+    || fail "SPEC 13 veto-when-off test did not run"
+  grep -q 'lock freezes the episode' "$test_log" \
+    || fail "lock freeze test did not run"
+  grep -q 'veto flag is frozen after the first paid bid' "$test_log" \
+    || fail "veto flag freeze test did not run"
   if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
     fail "unit tests must not call live Polar hosts"
   fi
