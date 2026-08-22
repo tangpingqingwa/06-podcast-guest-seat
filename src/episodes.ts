@@ -95,14 +95,38 @@ export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
   return episode;
 }
 
+const EPISODE_COLUMNS = `id, show_id, label, seat_kind, veto_enabled, opens_at, locks_at, locked_at`;
+
 export function getEpisode(db: AppDb, id: string): Episode | undefined {
   const row = db
     .prepare<[string], EpisodeRow>(
-      `SELECT id, show_id, label, seat_kind, veto_enabled, opens_at, locks_at, locked_at
-       FROM episodes WHERE id = ?`,
+      `SELECT ${EPISODE_COLUMNS} FROM episodes WHERE id = ?`,
     )
     .get(id);
   return row ? mapEpisode(row) : undefined;
+}
+
+/** Unlocked episode with the latest opensAt, else the latest episode. */
+export function getCurrentEpisode(db: AppDb): Episode | undefined {
+  const unlocked = db
+    .prepare<[], EpisodeRow>(
+      `SELECT ${EPISODE_COLUMNS} FROM episodes
+       WHERE locked_at IS NULL
+       ORDER BY opens_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get();
+  if (unlocked) {
+    return mapEpisode(unlocked);
+  }
+  const latest = db
+    .prepare<[], EpisodeRow>(
+      `SELECT ${EPISODE_COLUMNS} FROM episodes
+       ORDER BY opens_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get();
+  return latest ? mapEpisode(latest) : undefined;
 }
 
 function mapEpisode(row: EpisodeRow): Episode {

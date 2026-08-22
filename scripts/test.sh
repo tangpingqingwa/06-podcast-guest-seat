@@ -139,6 +139,31 @@ if [[ -f package.json ]]; then
     fail "rank engine must not add Polar or hygiene pages"
   fi
 
+  echo "== URL hygiene + pages source =="
+  for f in src/hygiene.ts src/http/routes/pages.ts src/http/routes/go.ts \
+    tests/hygiene.test.ts tests/pages.test.ts; do
+    [[ -f "$f" ]] || fail "missing $f"
+    [[ -s "$f" ]] || fail "empty $f"
+  done
+  grep -q 'canonicalizeSiteUrl' src/hygiene.ts \
+    || fail "src/hygiene.ts missing canonicalizeSiteUrl"
+  grep -q 'chat_link' src/hygiene.ts || fail "src/hygiene.ts missing chat_link"
+  grep -q 'nsfw' src/hygiene.ts || fail "src/hygiene.ts missing nsfw"
+  grep -q '/about' src/http/routes/pages.ts || fail "pages route missing /about"
+  grep -q '/rules' src/http/routes/pages.ts || fail "pages route missing /rules"
+  grep -q '\$5' src/http/routes/pages.ts || fail "rules page missing min \$5"
+  grep -q 'older' src/http/routes/pages.ts || fail "rules page missing older wins"
+  grep -q 'guest seat' src/http/routes/pages.ts \
+    || fail "rules page missing guest-seat veto default"
+  grep -q '/go/:listingId' src/http/routes/go.ts \
+    || fail "go route missing /go/:listingId"
+  grep -q 'incrementListingClicks' src/http/routes/go.ts \
+    || fail "go route missing click increment"
+  if grep -RInE 'createCheckout|PolarPort|POLAR_LIVE' src/hygiene.ts \
+    src/http/routes/pages.ts src/http/routes/go.ts >/dev/null 2>&1; then
+    fail "hygiene/pages/go must not start Polar checkout"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
@@ -171,6 +196,18 @@ if [[ -f package.json ]]; then
     || fail "SPEC 5 rank test did not run"
   grep -q 'other bidder cannot pay only the $1 difference' "$test_log" \
     || fail "SPEC 6 rank test did not run"
+  grep -q 'URL with ?utm_source=x is stored and /go has no query' "$test_log" \
+    || fail "SPEC 7 hygiene test did not run"
+  grep -q 'Discord / Telegram invite is rejected' "$test_log" \
+    || fail "SPEC 8 hygiene test did not run"
+  grep -q 'NSFW host is rejected' "$test_log" \
+    || fail "SPEC 9 hygiene test did not run"
+  grep -q 'public click /go/:id 302 + clicks increment' "$test_log" \
+    || fail "SPEC 15 public click test did not run"
+  grep -q 'GET /about describes the seat' "$test_log" \
+    || fail "about page test did not run"
+  grep -q 'GET /rules states min $5' "$test_log" \
+    || fail "rules page test did not run"
   if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
     fail "unit tests must not call live Polar hosts"
   fi
