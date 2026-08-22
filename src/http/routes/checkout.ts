@@ -134,8 +134,12 @@ export function quoteCheckout(
       "oneLiner must be a single line of at most 140 characters",
     );
   }
-  if (!getEpisode(db, episodeId)) {
+  const episode = getEpisode(db, episodeId);
+  if (!episode) {
     throw new CheckoutError("episode_not_found", "episode not found", 404);
+  }
+  if (episode.lockedAt) {
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
   }
   const siteUrl = canonicalizeSiteUrl(rawSiteUrl);
 
@@ -207,6 +211,13 @@ export function claimPaidCheckout(
   session: PolarCheckoutRecord,
   paidAt: string = paidAtNow(),
 ): Listing {
+  const episode = getEpisode(db, session.episodeId);
+  if (!episode) {
+    throw new CheckoutError("episode_not_found", "episode not found", 404);
+  }
+  if (episode.lockedAt) {
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
+  }
   if (session.kind === "raise") {
     return applyPaidRaise(db, {
       episodeId: session.episodeId,

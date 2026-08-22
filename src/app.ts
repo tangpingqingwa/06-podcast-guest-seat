@@ -3,6 +3,7 @@ import { openDatabase, type AppDb } from "./db.js";
 import { checkoutRoutes, createPolarPort } from "./http/routes/checkout.js";
 import { goRoutes } from "./http/routes/go.js";
 import { healthRoutes } from "./http/routes/health.js";
+import { hostRoutes, hostSessionSecret } from "./http/routes/host.js";
 import { pageRoutes } from "./http/routes/pages.js";
 import type { PolarPort } from "./polar/port.js";
 
@@ -10,6 +11,7 @@ declare module "fastify" {
   interface FastifyInstance {
     db: AppDb;
     polar: PolarPort;
+    hostSessionSecret: string;
   }
 }
 
@@ -18,6 +20,7 @@ export type BuildAppOptions = {
   db?: AppDb;
   databasePath?: string;
   polar?: PolarPort;
+  hostSessionSecret?: string;
 };
 
 export async function buildApp(
@@ -31,6 +34,10 @@ export async function buildApp(
   const polar = options.polar ?? createPolarPort();
   app.decorate("db", db);
   app.decorate("polar", polar);
+  app.decorate(
+    "hostSessionSecret",
+    options.hostSessionSecret ?? hostSessionSecret(),
+  );
   if (ownsDb) {
     app.addHook("onClose", async () => {
       db.close();
@@ -40,5 +47,6 @@ export async function buildApp(
   await app.register(pageRoutes);
   await app.register(goRoutes);
   await app.register(checkoutRoutes);
+  await app.register(hostRoutes);
   return app;
 }
