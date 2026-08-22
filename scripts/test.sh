@@ -164,6 +164,31 @@ if [[ -f package.json ]]; then
     fail "hygiene/pages/go must not start Polar checkout"
   fi
 
+  echo "== Polar checkout + fixture source =="
+  for f in src/polar/port.ts src/polar/fixture.ts src/polar/live.ts \
+    src/http/routes/checkout.ts tests/polar.test.ts; do
+    [[ -f "$f" ]] || fail "missing $f"
+    [[ -s "$f" ]] || fail "empty $f"
+  done
+  grep -q 'PolarPort' src/polar/port.ts || fail "src/polar/port.ts missing PolarPort"
+  grep -q 'createCheckout' src/polar/port.ts \
+    || fail "src/polar/port.ts missing createCheckout"
+  grep -q 'POLAR_FIXTURE_ONLY' src/polar/port.ts \
+    || fail "src/polar/port.ts missing POLAR_FIXTURE_ONLY"
+  grep -q 'FixturePolar' src/polar/fixture.ts \
+    || fail "src/polar/fixture.ts missing FixturePolar"
+  grep -q 'LivePolar' src/polar/live.ts || fail "src/polar/live.ts missing LivePolar"
+  grep -q 'POLAR_LIVE' src/polar/live.ts || fail "src/polar/live.ts missing POLAR_LIVE gate"
+  grep -q 'POST' src/http/routes/checkout.ts \
+    || fail "src/http/routes/checkout.ts missing POST"
+  grep -q '/checkout' src/http/routes/checkout.ts \
+    || fail "src/http/routes/checkout.ts missing /checkout"
+  grep -q 'POLAR_FIXTURE_ONLY' tests/polar.test.ts \
+    || fail "tests/polar.test.ts missing fixture-wins"
+  if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
+    fail "src/tests must not hard-code polar.sh HTTP"
+  fi
+
   echo "== tsc --noEmit =="
   npx tsc --noEmit
 
@@ -208,6 +233,12 @@ if [[ -f package.json ]]; then
     || fail "about page test did not run"
   grep -q 'GET /rules states min $5' "$test_log" \
     || fail "rules page test did not run"
+  grep -q 'fixture checkout without network claims rank' "$test_log" \
+    || fail "SPEC 16 polar fixture test did not run"
+  grep -q 'POLAR_LIVE unset in test' "$test_log" \
+    || fail "SPEC 17 no-live-Polar test did not run"
+  grep -q 'POLAR_FIXTURE_ONLY=1 wins' "$test_log" \
+    || fail "POLAR_FIXTURE_ONLY wins test did not run"
   if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
     fail "unit tests must not call live Polar hosts"
   fi
