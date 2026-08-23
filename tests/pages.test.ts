@@ -177,15 +177,45 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.equal(response.statusCode, 200);
   const body = response.body;
   assert.match(body, /data-host-open/);
+  assert.match(body, /data-host-only/);
+  assert.match(body, /data-guest-skip/);
+  assert.match(body, /Guests skip this/);
   assert.match(body, /Open the next episode so guests can bid/);
   assert.match(body, /action="\/host\/open"/);
   assert.match(body, /Open guest seat/);
   assert.match(body, /name="session"/);
   assert.match(body, /name="seatKind" value="guest_seat"/);
   assert.match(body, /data-waiting-on-host/);
+  assert.match(body, /Skip the host desk/);
   assert.match(body, /Polar cannot charge yet/);
   assert.match(body, /disabled/);
   assert.doesNotMatch(body, /name="episodeId"/);
+});
+
+test("GET / with no episode tells first-time guests to skip the host desk", async () => {
+  const app = await buildApp({ hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const waitingAt = body.indexOf("data-waiting-on-host");
+  const deskAt = body.indexOf("data-host-open");
+  const skipAt = body.indexOf("data-guest-skip");
+  const claimAt = body.indexOf('id="claim"');
+  assert.notEqual(waitingAt, -1);
+  assert.notEqual(deskAt, -1);
+  assert.notEqual(skipAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.match(body, /data-host-only/);
+  assert.match(body, /Guests skip this\. This desk is for the host — it is not a bid\./);
+  assert.match(body, /Skip the host desk\. That session form is not a bid\./);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, /name="bidUsd"[^>]*disabled/);
+  assert.match(body, /class="outbid" disabled/);
+  assert.match(body, /action="\/host\/open"/);
+  assert.match(body, /Open guest seat/);
+  assert.doesNotMatch(body, /name="episodeId"/);
+  assert.doesNotMatch(body, /Already on this episode\?/);
 });
 
 test("POST /host/open from the desk opens a guest-seat episode so Polar can charge", async () => {
@@ -226,7 +256,10 @@ test("POST /host/open from the desk opens a guest-seat episode so Polar can char
   assert.match(board.body, /Host veto is on \(default on for guest seat\)/);
   assert.match(board.body, /name="episodeId"/);
   assert.doesNotMatch(board.body, /data-host-open/);
+  assert.doesNotMatch(board.body, /data-host-only/);
+  assert.doesNotMatch(board.body, /data-guest-skip/);
   assert.doesNotMatch(board.body, /data-waiting-on-host/);
+  assert.doesNotMatch(board.body, /Skip the host desk/);
   assert.doesNotMatch(board.body, /name="bidUsd"[^>]*disabled/);
   assert.match(board.body, />Outbid<\/button>/);
 
@@ -277,6 +310,9 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   const board = await app.inject({ method: "GET", url: "/" });
   assert.equal(board.statusCode, 200);
   assert.match(board.body, /data-host-open/);
+  assert.match(board.body, /data-host-only/);
+  assert.match(board.body, /data-guest-skip/);
+  assert.match(board.body, /Guests skip this/);
   assert.match(board.body, /Open guest seat/);
   assert.match(board.body, /Booked Co/);
   assert.match(board.body, /disabled/);

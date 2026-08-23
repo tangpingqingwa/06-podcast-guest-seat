@@ -256,15 +256,17 @@ function renderWaitingRundown(): string {
   return `<section class="empty waiting" data-empty-board data-waiting-on-host>
   <p class="empty-kicker">No seat for sale</p>
   <p class="empty-lead">No open episode yet.</p>
+  <p>Skip the host desk. That session form is not a bid.</p>
   <p>The host opens the next board. Until then this claim is a preview — Polar cannot charge.</p>
   <p class="empty-path"><a href="/about#when-open">When the next episode opens</a></p>
 </section>`;
 }
 
 function renderHostOpenDesk(): string {
-  return `<section class="host-open" data-host-open>
+  return `<section class="host-open" data-host-open data-host-only>
   <p class="empty-kicker">Host desk</p>
   <p class="empty-lead">Open the next episode so guests can bid.</p>
+  <p class="host-open-note" data-guest-skip>Guests skip this. This desk is for the host — it is not a bid.</p>
   <p class="host-open-note">Guest seat opens with host veto on. Polar cannot charge until this board exists.</p>
   <form id="host-open-form" class="host-open-form" method="post" action="/host/open">
     <input type="hidden" name="seatKind" value="guest_seat"/>
