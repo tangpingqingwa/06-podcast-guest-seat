@@ -183,6 +183,7 @@ if [[ -f package.json ]]; then
   grep -q 'data-open-next' src/http/routes/pages.ts || fail "locked host desk missing data-open-next"
   grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
   grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
+  grep -q 'data-next-seat' src/http/routes/pages.ts || fail "N+1 board missing data-next-seat"
   grep -q 'takes #1' src/http/routes/pages.ts || fail "fresh-open board missing \$5 takes #1"
   grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
   if grep -Eqi 'featured guest|play count|followers' src/http/routes/pages.ts src/views/skin.ts; then
@@ -332,6 +333,8 @@ if [[ -f package.json ]]; then
     || fail "host-open desk test did not run"
   grep -q 'GET / after lock makes opening the next empty episode the host action' "$test_log" \
     || fail "host-open next-episode test did not run"
+  grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
+    || fail "N+1 first-guest bid test did not run"
   grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
     || fail "open-seat first-guest test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
