@@ -296,6 +296,9 @@ function sendCheckoutError(reply: FastifyReply, err: unknown): FastifyReply {
   if (message.startsWith("BLOCKED-SECRET")) {
     return reply.code(503).send({ error: "polar_unavailable" });
   }
+  if (message === "polar checkout failed closed") {
+    return reply.code(503).send({ error: "polar_unavailable" });
+  }
   throw err;
 }
 

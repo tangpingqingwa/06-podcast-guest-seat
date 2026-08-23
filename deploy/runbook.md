@@ -18,6 +18,8 @@ Copy [`.env.example`](../.env.example) to `/etc/guest-seat.env` (mode `600`). Se
 | `POLAR_FIXTURE_ONLY` | leave unset on the VPS. `1` wins over `POLAR_LIVE` (CI / `scripts/test.sh`) |
 | `POLAR_ACCESS_TOKEN` | live Polar only; missing secret fails closed |
 | `POLAR_WEBHOOK_SECRET` | live webhook HMAC; missing secret fails closed |
+| `POLAR_API_BASE` | optional. Default is production Polar. Sandbox smoke uses `https://sandbox-api.polar.sh` |
+| `POLAR_PRODUCT_ID` | optional Polar product for custom USD checkout |
 
 Do not bake secrets into the image. Do not commit `.env`. A bind-mount over `/app/data` must be writable by uid `1000` (`node`). Image and CI do not set `POLAR_LIVE`.
 

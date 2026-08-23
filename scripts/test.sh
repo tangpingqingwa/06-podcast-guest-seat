@@ -229,12 +229,16 @@ if [[ -f package.json ]]; then
   grep -q 'HOST_SESSION_SECRET' .env.example || fail ".env.example missing HOST_SESSION_SECRET"
   grep -q 'POLAR_ACCESS_TOKEN' .env.example || fail ".env.example missing POLAR_ACCESS_TOKEN"
   grep -q 'POLAR_WEBHOOK_SECRET' .env.example || fail ".env.example missing POLAR_WEBHOOK_SECRET"
+  grep -q 'POLAR_API_BASE' .env.example || fail ".env.example missing POLAR_API_BASE"
+  grep -q 'POLAR_PRODUCT_ID' .env.example || fail ".env.example missing POLAR_PRODUCT_ID"
   if grep -E '^[[:space:]]*POLAR_LIVE=1[[:space:]]*$' .env.example >/dev/null; then
     fail ".env.example must not default POLAR_LIVE on"
   fi
   if grep -E '^[[:space:]]*POLAR_(ACCESS_TOKEN|WEBHOOK_SECRET)=' .env.example >/dev/null; then
     fail ".env.example must keep Polar secrets commented"
   fi
+  grep -q 'POLAR_API_BASE' src/polar/port.ts || fail "src/polar/port.ts missing POLAR_API_BASE override"
+  grep -q 'polarApiBase' src/polar/live.ts || fail "src/polar/live.ts must honor POLAR_API_BASE"
   grep -q '/healthz' deploy/runbook.md || fail "runbook missing /healthz"
   grep -q 'POLAR_LIVE=1' deploy/runbook.md || fail "runbook missing how to enable live Polar"
   grep -q 'docker build' deploy/runbook.md || fail "runbook missing docker build"

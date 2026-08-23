@@ -45,6 +45,8 @@ BASE="${LIVE_SMOKE_BASE:-}"
 OP_POLAR_LIVE="${POLAR_LIVE:-}"
 OP_POLAR_ACCESS_TOKEN="${POLAR_ACCESS_TOKEN:-}"
 OP_POLAR_WEBHOOK_SECRET="${POLAR_WEBHOOK_SECRET:-}"
+OP_POLAR_API_BASE="${POLAR_API_BASE:-}"
+OP_POLAR_PRODUCT_ID="${POLAR_PRODUCT_ID:-}"
 HOST_SECRET="${HOST_SESSION_SECRET:-live-smoke-host}"
 
 cleanup() {
@@ -134,7 +136,7 @@ start_fixture_server() {
   local log_path="$3"
   (
     cd "$root"
-    unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET || true
+    unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_API_BASE POLAR_PRODUCT_ID || true
     export POLAR_FIXTURE_ONLY=1
     export PORT="${port}"
     export DATABASE_PATH="${db_path}"
@@ -297,6 +299,11 @@ fi
 
 echo "base=${BASE}"
 echo "operator POLAR_LIVE=${OP_POLAR_LIVE:-<unset>}"
+if [[ -n "${OP_POLAR_API_BASE}" ]]; then
+  echo "operator POLAR_API_BASE is set (len=${#OP_POLAR_API_BASE})"
+else
+  echo "operator POLAR_API_BASE=<unset>"
+fi
 
 # --- healthz (process is up) ---
 health_body="${WORKDIR}/healthz.json"
@@ -511,6 +518,16 @@ if [[ "${OP_POLAR_LIVE}" == "1" ]]; then
       export POLAR_LIVE=1
       export POLAR_ACCESS_TOKEN="${OP_POLAR_ACCESS_TOKEN}"
       export POLAR_WEBHOOK_SECRET="${OP_POLAR_WEBHOOK_SECRET:-}"
+      if [[ -n "${OP_POLAR_API_BASE}" ]]; then
+        export POLAR_API_BASE="${OP_POLAR_API_BASE}"
+      else
+        unset POLAR_API_BASE || true
+      fi
+      if [[ -n "${OP_POLAR_PRODUCT_ID}" ]]; then
+        export POLAR_PRODUCT_ID="${OP_POLAR_PRODUCT_ID}"
+      else
+        unset POLAR_PRODUCT_ID || true
+      fi
       export PORT="${live_port}"
       export DATABASE_PATH="${live_db}"
       export HOST_SESSION_SECRET="${HOST_SECRET}"
@@ -534,14 +551,17 @@ if [[ "${OP_POLAR_LIVE}" == "1" ]]; then
         "{\"episodeId\":\"${live_episode}\",\"name\":\"Live Guest ${STAMP}\",\"siteUrl\":\"https://live-${STAMP}.example/\",\"oneLiner\":\"Must not rank until Polar pays.\",\"bidUsd\":5}" \
         "$live_body" "$live_hdrs" || true)"
       live_url="$(json_field "$live_body" "url" || true)"
+      live_err="$(json_field "$live_body" "error" || true)"
       live_board="${WORKDIR}/live-board.html"
       http_get "$live_base" "/" "$live_board" >/dev/null || true
       if html_has "$live_board" "Live Guest ${STAMP}"; then
         record "live-checkout" "FAIL" "unpaid live Polar session appeared on the board"
-      elif [[ "$live_url" == https://*polar.sh* ]]; then
-        record "live-checkout" "PASS" "live checkout returned Polar URL; unpaid session not listed"
+      elif [[ "$live_url" == https://sandbox.polar.sh/* ]]; then
+        record "live-checkout" "PASS" "live Polar sandbox Checkout URL; unpaid session not listed"
+      elif [[ "$live_code" == "503" && "$live_err" == "polar_unavailable" ]]; then
+        record "live-checkout" "PASS-ERROR" "POLAR_LIVE=1 token present; checkout failed closed (HTTP 503)"
       else
-        record "live-checkout" "PASS-ERROR" "POLAR_LIVE=1 token present; HTTP ${live_code} url=${live_url}"
+        record "live-checkout" "PASS-ERROR" "POLAR_LIVE=1 token present; HTTP ${live_code} not a sandbox.polar.sh Checkout URL"
       fi
     fi
     if [[ -n "${LIVE_PID}" ]] && kill -0 "${LIVE_PID}" 2>/dev/null; then
