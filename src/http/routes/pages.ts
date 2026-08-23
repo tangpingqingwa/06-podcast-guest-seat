@@ -336,6 +336,31 @@ function renderHostOpenDesk(input: {
 </section>`;
 }
 
+function renderHostLockDesk(episode: Episode, booked: BoardRow | undefined): string {
+  const label = escapeHtml(episode.label);
+  const lead = booked
+    ? `Lock ${label} — book ${escapeHtml(booked.name)}.`
+    : `Lock ${label}. Polar cannot charge after lock.`;
+  const bookedLine = booked
+    ? episode.vetoEnabled
+      ? `Lock books ${escapeHtml(booked.name)} at $${booked.bidUsd}, the highest remaining eligible bid. Vetoed rows stay visible. Polar cannot charge after lock.`
+      : `Lock books ${escapeHtml(booked.name)} at $${booked.bidUsd}, the highest paid bid. Polar cannot charge after lock.`
+    : episode.vetoEnabled
+      ? "Lock books the highest remaining eligible bid. Vetoed rows stay visible. Polar cannot charge after lock."
+      : "Lock books the highest paid bid. Polar cannot charge after lock.";
+  return `<section class="host-open host-lock" data-host-lock data-host-only>
+  <p class="empty-kicker">Lock episode</p>
+  <p class="empty-lead">${lead}</p>
+  <p class="host-open-note" data-guest-skip>Guests skip this. This desk is for the host — it is not a bid.</p>
+  <p class="host-open-note">${bookedLine}</p>
+  <form id="host-lock-form" class="host-open-form" method="post" action="/host/lock">
+    <input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>
+    <input name="session" type="password" required placeholder="Host session" autocomplete="current-password"/>
+    <button type="submit" class="lock-episode">Lock ${label}</button>
+  </form>
+</section>`;
+}
+
 export function renderBoardHtml(
   episode: Episode | undefined,
   listings: readonly Listing[],
@@ -360,6 +385,7 @@ export function renderBoardHtml(
   </div>`;
 
   const lockedEpisode = episode && !canCharge ? episode : undefined;
+  const booked = rows.find((row) => row.rank === 1);
   const claim = renderClaim({
     episode,
     canCharge,
@@ -367,7 +393,11 @@ export function renderBoardHtml(
     emptyBoard: rows.length === 0,
     nextSeat,
   });
-  const desk = !canCharge ? renderHostOpenDesk({ nextLabel, lockedEpisode }) : "";
+  const desk = !canCharge
+    ? renderHostOpenDesk({ nextLabel, lockedEpisode })
+    : episode && rows.length > 0
+      ? renderHostLockDesk(episode, booked)
+      : "";
   const ticket = renderShowTicket(episode);
   const studio = nextSeat
     ? `${claim}
@@ -465,6 +495,18 @@ export function renderHostOpenErrorHtml(code: string): string {
     body: `<article class="doc">
 <h1>Episode did not open</h1>
 <p class="empty">${escapeHtml(code)}. Polar cannot charge yet.</p>
+<p><a href="/">Back to the rundown</a></p>
+</article>`,
+  });
+}
+
+export function renderHostLockErrorHtml(code: string): string {
+  return renderLayout({
+    title: "Host · Podcast Guest Seat",
+    path: "/",
+    body: `<article class="doc">
+<h1>Episode did not lock</h1>
+<p class="empty">${escapeHtml(code)}. Polar can still charge until this episode locks.</p>
 <p><a href="/">Back to the rundown</a></p>
 </article>`,
   });

@@ -11,7 +11,7 @@ import {
   VetoError,
   vetoListing,
 } from "../../veto.js";
-import { renderHostOpenErrorHtml } from "./pages.js";
+import { renderHostLockErrorHtml, renderHostOpenErrorHtml } from "./pages.js";
 
 export const HOST_VETO_PATH = "/host/veto" as const;
 export const HOST_LOCK_PATH = "/host/lock" as const;
@@ -81,13 +81,14 @@ function requireHostSession(
   reply: FastifyReply,
   expected: string,
   asHtml = false,
+  renderHtmlError: (code: string) => string = renderHostOpenErrorHtml,
 ): boolean {
   if (!expected) {
     if (asHtml) {
       void reply
         .code(503)
         .type("text/html; charset=utf-8")
-        .send(renderHostOpenErrorHtml("host_unconfigured"));
+        .send(renderHtmlError("host_unconfigured"));
     } else {
       void reply.code(503).send({ error: "host_unconfigured" });
     }
@@ -98,7 +99,7 @@ function requireHostSession(
       void reply
         .code(401)
         .type("text/html; charset=utf-8")
-        .send(renderHostOpenErrorHtml("unauthorized"));
+        .send(renderHtmlError("unauthorized"));
     } else {
       void reply.code(401).send({ error: "unauthorized" });
     }
@@ -111,13 +112,14 @@ function sendHostError(
   reply: FastifyReply,
   err: unknown,
   asHtml = false,
+  renderHtmlError: (code: string) => string = renderHostOpenErrorHtml,
 ): FastifyReply {
   if (err instanceof VetoError || err instanceof EpisodeError) {
     if (asHtml) {
       return reply
         .code(err.statusCode)
         .type("text/html; charset=utf-8")
-        .send(renderHostOpenErrorHtml(err.code));
+        .send(renderHtmlError(err.code));
     }
     return reply.code(err.statusCode).send({ error: err.code });
   }
@@ -200,23 +202,41 @@ export const hostRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post(HOST_LOCK_PATH, async (request, reply) => {
-    if (!requireHostSession(request, reply, app.hostSessionSecret)) {
+    const html = wantsHtml(request);
+    if (
+      !requireHostSession(
+        request,
+        reply,
+        app.hostSessionSecret,
+        html,
+        renderHostLockErrorHtml,
+      )
+    ) {
       return;
     }
     const body = isRecord(request.body) ? request.body : {};
     const episodeId = readString(body.episodeId);
     if (!episodeId) {
+      if (html) {
+        return reply
+          .code(400)
+          .type("text/html; charset=utf-8")
+          .send(renderHostLockErrorHtml("invalid_lock"));
+      }
       return reply.code(400).send({ error: "invalid_lock" });
     }
     try {
       const result = lockEpisode(app.db, episodeId);
+      if (html) {
+        return reply.redirect("/", 303);
+      }
       return {
         ok: true,
         episode: result.episode,
         booked: result.booked ?? null,
       };
     } catch (err) {
-      return sendHostError(reply, err);
+      return sendHostError(reply, err, html, renderHostLockErrorHtml);
     }
   });
 
