@@ -328,10 +328,10 @@ function renderHostOpenDesk(input: {
     ? `${escapeHtml(locked.label)} stays booked. ${next} opens empty — prior bids do not carry. Polar cannot charge on N+1 until you open it.`
     : "Guest seat opens with host veto on. Polar cannot charge until this board exists.";
   const afterLock = locked
-    ? " open-after-lock-first"
+    ? " open-after-lock-first open-after-lock-two"
     : "";
   const afterLockMarks = locked
-    ? " data-open-next data-open-after-lock data-open-after-lock-first"
+    ? " data-open-next data-open-after-lock data-open-after-lock-first data-open-after-lock-two"
     : "";
   return `<section class="host-open${afterLock}" data-host-open data-host-only${afterLockMarks}>
   <p class="empty-kicker">${kicker}</p>
