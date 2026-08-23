@@ -243,6 +243,29 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   background: var(--studio-2);
   padding: 0 0.8rem;
 }
+.host-open-form .open-next {
+  justify-self: stretch;
+  height: 2.7rem;
+  border: 1px solid var(--on-air);
+  border-radius: 0.35rem;
+  background: var(--on-air);
+  color: #ffd7cf;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.host-open[data-open-next] {
+  justify-items: stretch;
+  text-align: left;
+  border-style: solid;
+  border-color: var(--lamp);
+  background: #241811;
+  box-shadow: inset 3px 0 0 var(--on-air);
+}
+.host-open[data-open-next] .empty-kicker,
+.host-open[data-open-next] .empty-lead,
+.host-open[data-open-next] .host-open-note { justify-self: start; }
+.host-open[data-open-next] .empty-lead { color: #f3ead8; }
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }

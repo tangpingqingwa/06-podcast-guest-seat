@@ -182,9 +182,11 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.match(body, /Guests skip this/);
   assert.match(body, /Open the next episode so guests can bid/);
   assert.match(body, /action="\/host\/open"/);
-  assert.match(body, /Open guest seat/);
+  assert.match(body, /Open Episode 1/);
+  assert.match(body, /class="open-next"/);
   assert.match(body, /name="session"/);
   assert.match(body, /name="seatKind" value="guest_seat"/);
+  assert.match(body, /name="label"[^>]*value="Episode 1"/);
   assert.match(body, /data-waiting-on-host/);
   assert.match(body, /Skip the host desk/);
   assert.match(body, /Polar cannot charge yet/);
@@ -213,7 +215,9 @@ test("GET / with no episode tells first-time guests to skip the host desk", asyn
   assert.match(body, /name="bidUsd"[^>]*disabled/);
   assert.match(body, /class="outbid" disabled/);
   assert.match(body, /action="\/host\/open"/);
-  assert.match(body, /Open guest seat/);
+  assert.match(body, /Open Episode 1/);
+  assert.match(body, /class="open-next"/);
+  assert.doesNotMatch(body, /class="open-next outbid"/);
   assert.doesNotMatch(body, /name="episodeId"/);
   assert.doesNotMatch(body, /Already on this episode\?/);
 });
@@ -319,13 +323,57 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.match(board.body, /data-host-only/);
   assert.match(board.body, /data-guest-skip/);
   assert.match(board.body, /Guests skip this/);
-  assert.match(board.body, /Open guest seat/);
+  assert.match(board.body, /Open Episode 13/);
+  assert.match(board.body, /class="open-next"/);
+  assert.match(board.body, /data-open-next/);
+  assert.match(board.body, /Episode 12 is locked\. Open Episode 13 empty\./);
+  assert.match(board.body, /Episode 12 stays booked/);
+  assert.match(board.body, /prior bids do not carry/);
+  assert.match(board.body, /name="label"[^>]*value="Episode 13"/);
   assert.match(board.body, /Booked Co/);
   assert.match(board.body, /disabled/);
   assert.match(board.body, /This episode is locked/);
   assert.doesNotMatch(board.body, /data-claim-live/);
   assert.doesNotMatch(board.body, /data-open-seat/);
   assert.doesNotMatch(board.body, /Seat is open/);
+  assert.match(board.body, /class="outbid" disabled/);
+  assert.doesNotMatch(board.body, /class="open-next outbid"/);
+});
+
+test("GET / after lock makes opening the next empty episode the host action, not a bid", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_locked_next",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    lockedAt: "2026-08-22T12:00:00.000Z",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  const body = board.body;
+  const deskAt = body.indexOf("data-host-open");
+  const openNextAt = body.indexOf("data-open-next");
+  const claimAt = body.indexOf('id="claim"');
+  const openBtnAt = body.indexOf('class="open-next"');
+  const outbidAt = body.indexOf("Outbid");
+  assert.notEqual(deskAt, -1);
+  assert.notEqual(openNextAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(openBtnAt, -1);
+  assert.ok(deskAt < claimAt);
+  assert.ok(openBtnAt < outbidAt || outbidAt === -1);
+  assert.match(body, /Next episode/);
+  assert.match(body, /Open Episode 13/);
+  assert.match(body, /Polar cannot charge on N\+1 until you open it/);
+  assert.match(body, /This desk is for the host — it is not a bid/);
+  assert.match(body, /name="bidUsd"[^>]*disabled/);
+  assert.match(body, /class="outbid" disabled/);
+  assert.doesNotMatch(body, /data-claim-live/);
+  assert.doesNotMatch(body, /Open guest seat/);
 });
 
 test("GET / on a fresh-open empty episode makes bidding the guest seat live", async () => {

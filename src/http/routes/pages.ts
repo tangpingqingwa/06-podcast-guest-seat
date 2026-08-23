@@ -1,5 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
-import { getCurrentEpisode, getEpisode, type Episode } from "../../episodes.js";
+import {
+  getCurrentEpisode,
+  getEpisode,
+  nextEpisodeLabel,
+  type Episode,
+} from "../../episodes.js";
 import { listListingsForEpisode, type Listing } from "../../listings.js";
 import { MIN_BID_USD, rankListings, type RankedListing } from "../../rank.js";
 import { BOARD_CSS } from "../../views/skin.js";
@@ -283,17 +288,32 @@ function renderOpenEmptyRundown(episode: Episode): string {
 </section>`;
 }
 
-function renderHostOpenDesk(): string {
-  return `<section class="host-open" data-host-open data-host-only>
-  <p class="empty-kicker">Host desk</p>
-  <p class="empty-lead">Open the next episode so guests can bid.</p>
+function renderHostOpenDesk(input: {
+  nextLabel: string;
+  lockedEpisode?: Episode;
+}): string {
+  const next = escapeHtml(input.nextLabel);
+  const locked = input.lockedEpisode;
+  const kicker = locked ? "Next episode" : "Host desk";
+  const lead = locked
+    ? `${escapeHtml(locked.label)} is locked. Open ${next} empty.`
+    : "Open the next episode so guests can bid.";
+  const note = locked
+    ? `${escapeHtml(locked.label)} stays booked. ${next} opens empty — prior bids do not carry. Polar cannot charge on N+1 until you open it.`
+    : "Guest seat opens with host veto on. Polar cannot charge until this board exists.";
+  return `<section class="host-open" data-host-open data-host-only${locked ? " data-open-next" : ""}>
+  <p class="empty-kicker">${kicker}</p>
+  <p class="empty-lead">${lead}</p>
   <p class="host-open-note" data-guest-skip>Guests skip this. This desk is for the host — it is not a bid.</p>
-  <p class="host-open-note">Guest seat opens with host veto on. Polar cannot charge until this board exists.</p>
+  <p class="host-open-note">${note}</p>
   <form id="host-open-form" class="host-open-form" method="post" action="/host/open">
     <input type="hidden" name="seatKind" value="guest_seat"/>
-    <input name="label" maxlength="80" placeholder="Episode 1" autocomplete="off"/>
+    <label class="host-open-label">
+      <span class="sr-only">Episode label</span>
+      <input name="label" maxlength="80" value="${next}" placeholder="${next}" autocomplete="off"/>
+    </label>
     <input name="session" type="password" required placeholder="Host session" autocomplete="current-password"/>
-    <button type="submit" class="outbid">Open guest seat</button>
+    <button type="submit" class="open-next">Open ${next}</button>
   </form>
 </section>`;
 }
@@ -303,6 +323,7 @@ export function renderBoardHtml(
   listings: readonly Listing[],
   now: Date = new Date(),
   path: string = "/",
+  nextLabel: string = "Episode 1",
 ): string {
   const canCharge = Boolean(episode && episode.lockedAt === null);
   const rows = episode ? boardRows(listings) : [];
@@ -318,12 +339,13 @@ export function renderBoardHtml(
     ${rows.map((row) => renderGuestCard(row, now)).join("\n    ")}
   </div>`;
 
+  const lockedEpisode = episode && !canCharge ? episode : undefined;
   return renderLayout({
     title: episode ? `${episode.label} · Podcast Guest Seat` : "Podcast Guest Seat",
     path,
     body: `<div class="studio">
 ${renderShowTicket(episode)}
-${!canCharge ? renderHostOpenDesk() : ""}
+${!canCharge ? renderHostOpenDesk({ nextLabel, lockedEpisode }) : ""}
 ${renderClaim({
   episode,
   canCharge,
@@ -425,7 +447,7 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
     const listings = episode ? listListingsForEpisode(app.db, episode.id) : [];
     return reply
       .type("text/html; charset=utf-8")
-      .send(renderBoardHtml(episode, listings));
+      .send(renderBoardHtml(episode, listings, new Date(), "/", nextEpisodeLabel(app.db)));
   });
 
   app.get<{ Params: { episodeId: string } }>(
@@ -444,7 +466,15 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
       const listings = listListingsForEpisode(app.db, episode.id);
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderBoardHtml(episode, listings, new Date(), `/e/${episode.id}`));
+        .send(
+          renderBoardHtml(
+            episode,
+            listings,
+            new Date(),
+            `/e/${episode.id}`,
+            nextEpisodeLabel(app.db),
+          ),
+        );
     },
   );
 
