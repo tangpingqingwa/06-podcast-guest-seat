@@ -255,11 +255,17 @@ test("POST /host/open from the desk opens a guest-seat episode so Polar can char
   assert.match(board.body, /data-episode-open="true"/);
   assert.match(board.body, /Host veto is on \(default on for guest seat\)/);
   assert.match(board.body, /name="episodeId"/);
+  assert.match(board.body, /data-claim-live/);
+  assert.match(board.body, /data-open-seat/);
+  assert.match(board.body, /Seat is open/);
+  assert.match(board.body, /\$5 takes #1/);
+  assert.match(board.body, /Polar can charge/);
   assert.doesNotMatch(board.body, /data-host-open/);
   assert.doesNotMatch(board.body, /data-host-only/);
   assert.doesNotMatch(board.body, /data-guest-skip/);
   assert.doesNotMatch(board.body, /data-waiting-on-host/);
   assert.doesNotMatch(board.body, /Skip the host desk/);
+  assert.doesNotMatch(board.body, /Already on this episode\?/);
   assert.doesNotMatch(board.body, /name="bidUsd"[^>]*disabled/);
   assert.match(board.body, />Outbid<\/button>/);
 
@@ -317,6 +323,52 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.match(board.body, /Booked Co/);
   assert.match(board.body, /disabled/);
   assert.match(board.body, /This episode is locked/);
+  assert.doesNotMatch(board.body, /data-claim-live/);
+  assert.doesNotMatch(board.body, /data-open-seat/);
+  assert.doesNotMatch(board.body, /Seat is open/);
+});
+
+test("GET / on a fresh-open empty episode makes bidding the guest seat live", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_open",
+    showId: "show_english",
+    label: "Episode 1",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const claimAt = body.indexOf('id="claim"');
+  const openSeatAt = body.indexOf("data-open-seat");
+  const liveAt = body.indexOf("data-claim-live");
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(openSeatAt, -1);
+  assert.notEqual(liveAt, -1);
+  assert.match(body, /data-episode-open="true"/);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, /name="episodeId"/);
+  assert.match(body, /value="5"/);
+  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, /The guest seat is open/);
+  assert.match(body, /Polar can charge/);
+  assert.match(body, /\$5 takes #1/);
+  assert.match(body, /Seat is open/);
+  assert.match(body, /First paid bid of at least \$5 takes #1/);
+  assert.match(body, /No paid listings on this episode yet/);
+  assert.match(body, /Host veto is on \(default on for guest seat\)/);
+  assert.doesNotMatch(body, /data-waiting-on-host/);
+  assert.doesNotMatch(body, /No open episode yet/);
+  assert.doesNotMatch(body, /No seat for sale/);
+  assert.doesNotMatch(body, /data-host-open/);
+  assert.doesNotMatch(body, /data-guest-skip/);
+  assert.doesNotMatch(body, /Already on this episode\?/);
+  assert.doesNotMatch(body, /name="bidUsd"[^>]*disabled/);
+  assert.doesNotMatch(body, /class="outbid" disabled/);
+  assert.doesNotMatch(body, /featured guest/i);
 });
 
 test("studio rundown is a guest card, not a table: name, one-liner, site, bid, veto", async () => {
@@ -367,6 +419,10 @@ test("studio rundown is a guest card, not a table: name, one-liner, site, bid, v
   assert.match(body, /name="name"/);
   assert.match(body, /name="siteUrl"/);
   assert.match(body, /name="oneLiner"/);
+  assert.match(body, /data-claim-live/);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, /Seat is open/);
+  assert.match(body, /Already on this episode\?/);
   assert.match(body, /data-rundown/);
   assert.match(body, /Ada Lovelace/);
   assert.match(body, /Notes on the analytical engine/);
