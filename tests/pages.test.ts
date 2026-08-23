@@ -357,7 +357,7 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.match(board.body, /Open Episode 13/);
   assert.match(board.body, /class="open-next"/);
   assert.match(board.body, /data-open-next/);
-  assert.match(board.body, /data-open-after-lock(?!-first)/);
+  assert.match(board.body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(board.body, /data-open-after-lock-first/);
   assert.match(board.body, /data-open-after-lock-two/);
   assert.match(board.body, /class="host-open open-after-lock-first open-after-lock-two"/);
@@ -601,7 +601,7 @@ test("GET / after lock makes the host desk the certain next host action", async 
   assert.ok(lockAfterFirstAt < afterLockTwoAt);
   assert.ok(claimAt < openFormAt);
   assert.ok(deskAt < rundownAt);
-  assert.match(body, /data-open-after-lock(?!-first)/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two"/);
@@ -734,7 +734,7 @@ test("GET / after lock concentrates the locked episode after the host desk moved
   assert.match(body, /Vetoed: hard sell/);
   assert.match(body, /data-listing-id="lst_lock_veto"[^>]*data-vetoed="true"/);
   assert.match(body, /Open Episode 13/);
-  assert.match(body, /data-open-after-lock(?!-first)/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /Guests skip this/);
@@ -850,7 +850,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(afterLockFirstAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockFirstAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-open-after-lock(?!-first)/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two"/);
@@ -990,7 +990,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is concent
   assert.match(body, /Vetoed: hard sell/);
   assert.match(body, /data-listing-id="lst_lock_first_veto"[^>]*data-vetoed="true"/);
   assert.match(body, /Open Episode 13/);
-  assert.match(body, /data-open-after-lock(?!-first)/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two"/);
@@ -1108,7 +1108,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(afterLockTwoAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockTwoAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-open-after-lock(?!-first)/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two))/);
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two"/);
