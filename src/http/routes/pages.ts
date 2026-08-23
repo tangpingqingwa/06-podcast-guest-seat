@@ -222,7 +222,7 @@ function vetoNote(episode: Episode): string {
 
 function renderLockedClaim(episode: Episode): string {
   const label = escapeHtml(episode.label);
-  return `<section class="claim" id="claim" data-claim-locked>
+  return `<section class="claim" id="claim" data-claim-locked data-lock-after-open>
   <h1 class="claim-title">${label} is locked</h1>
   <p class="claim-note">Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty.</p>
   <p class="form-hint">This episode is locked. Polar cannot charge. Prior bids do not carry. Unpaid checkout does not rank.</p>
@@ -414,8 +414,8 @@ ${ticket}
 ${rundown}`
     : lockedEpisode
       ? `${ticket}
-${desk}
 ${claim}
+${desk}
 ${rundown}`
       : `${ticket}
 ${desk}

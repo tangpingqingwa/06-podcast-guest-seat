@@ -139,6 +139,21 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   margin-left: 0;
   text-align: left;
 }
+.claim[data-lock-after-open] {
+  padding: 1rem 0.9rem 1.1rem;
+  border: 1px solid var(--lamp);
+  background: #241811;
+  box-shadow: inset 3px 0 0 var(--on-air);
+}
+.claim[data-lock-after-open] .claim-title {
+  justify-content: flex-start;
+  text-align: left;
+}
+.claim[data-lock-after-open] .claim-note,
+.claim[data-lock-after-open] .form-hint {
+  margin-left: 0;
+  text-align: left;
+}
 .claim-title {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.5rem;
   margin: 0;
