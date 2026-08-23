@@ -183,6 +183,7 @@ if [[ -f package.json ]]; then
   grep -q 'class="lock-episode"' src/http/routes/pages.ts || fail "host lock desk missing lock-episode control"
   grep -q 'class="open-next"' src/http/routes/pages.ts || fail "host desk missing open-next control"
   grep -q 'data-open-next' src/http/routes/pages.ts || fail "locked host desk missing data-open-next"
+  grep -q 'data-open-after-lock' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock"
   grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
   grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
@@ -340,6 +341,8 @@ if [[ -f package.json ]]; then
     || fail "host-lock desk post test did not run"
   grep -q 'GET / after lock makes opening the next empty episode the host action' "$test_log" \
     || fail "host-open next-episode test did not run"
+  grep -q 'GET / after lock makes the host desk the certain next host action' "$test_log" \
+    || fail "open-after-lock host-desk test did not run"
   grep -q 'GET / after lock makes the locked episode certain for a first-time guest' "$test_log" \
     || fail "locked-guest first-user test did not run"
   grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
