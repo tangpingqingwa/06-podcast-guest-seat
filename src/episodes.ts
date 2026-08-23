@@ -76,6 +76,15 @@ export function countEpisodes(db: AppDb): number {
 }
 
 export function nextEpisodeLabel(db: AppDb): string {
+  const latest = db
+    .prepare<[], { label: string }>(
+      `SELECT label FROM episodes ORDER BY opens_at DESC, id DESC LIMIT 1`,
+    )
+    .get();
+  const match = latest ? /^Episode\s+(\d+)$/i.exec(latest.label.trim()) : null;
+  if (match) {
+    return `Episode ${Number(match[1]) + 1}`;
+  }
   return `Episode ${countEpisodes(db) + 1}`;
 }
 

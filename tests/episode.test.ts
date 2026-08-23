@@ -7,6 +7,7 @@ import {
   EpisodeError,
   getCurrentEpisode,
   getEpisode,
+  nextEpisodeLabel,
   openNextEpisode,
 } from "../src/episodes.js";
 import {
@@ -108,6 +109,19 @@ test("openNextEpisode refuses a second unlocked episode", () => {
     () => openNextEpisode(db, { label: "Episode 2" }),
     (err: unknown) => err instanceof EpisodeError && err.code === "episode_already_open",
   );
+});
+
+test("nextEpisodeLabel increments from the latest Episode N", () => {
+  const db = memoryDb();
+  assert.equal(nextEpisodeLabel(db), "Episode 1");
+  createEpisode(db, {
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-01T00:00:00.000Z",
+    lockedAt: "2026-08-08T00:00:00.000Z",
+  });
+  assert.equal(nextEpisodeLabel(db), "Episode 13");
 });
 
 test("openNextEpisode after lock opens an empty N+1 board", () => {
