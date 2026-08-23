@@ -207,26 +207,39 @@ function renderGuestCard(row: BoardRow, now: Date): string {
 </article>`;
 }
 
+function vetoNote(episode: Episode): string {
+  const state = episode.vetoEnabled ? "on" : "off";
+  const guestDefault =
+    episode.seatKind === "guest_seat" ? " (default on for guest seat)" : "";
+  return `Host veto is ${state}${guestDefault}.`;
+}
+
 function renderClaim(input: {
   episode: Episode | undefined;
   canCharge: boolean;
   defaultBid: number;
+  emptyBoard: boolean;
 }): string {
   const seat = input.episode ? seatLabel(input.episode.seatKind) : "guest seat";
+  const openEmpty = Boolean(input.episode && input.canCharge && input.emptyBoard);
   const note = !input.episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : !input.canCharge
       ? "Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty."
-      : `Rank is the bid. Host veto is ${input.episode.vetoEnabled ? "on" : "off"}${
-          input.episode.seatKind === "guest_seat" ? " (default on for guest seat)" : ""
-        }.`;
+      : openEmpty
+        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(input.episode)}`
+        : `Rank is the bid. ${vetoNote(input.episode)}`;
   const hint = !input.episode
     ? "No seat is for sale until the host opens an episode."
     : !input.canCharge
       ? "This episode is locked. The next episode opens empty — prior bids do not carry."
-      : "Already on this episode? Enter the same site and raise. You pay only the difference.";
+      : openEmpty
+        ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
+        : "Already on this episode? Enter the same site and raise. You pay only the difference.";
   const disabled = input.canCharge ? "" : " disabled";
-  return `<section class="claim" id="claim">
+  const live = input.canCharge ? " data-claim-live" : "";
+  const openSeat = openEmpty ? " data-open-seat" : "";
+  return `<section class="claim" id="claim"${live}${openSeat}>
   <h1 class="claim-title">
     <span>Claim the ${escapeHtml(seat)} for</span>
     <span class="bid-stepper">
@@ -262,6 +275,14 @@ function renderWaitingRundown(): string {
 </section>`;
 }
 
+function renderOpenEmptyRundown(episode: Episode): string {
+  return `<section class="empty open-seat" data-empty-board data-open-seat>
+  <p class="empty-kicker">Seat is open</p>
+  <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
+  <p>No paid listings on this episode yet. Polar can charge. Outbid claims the ${escapeHtml(seatLabel(episode.seatKind))} after payment.</p>
+</section>`;
+}
+
 function renderHostOpenDesk(): string {
   return `<section class="host-open" data-host-open data-host-only>
   <p class="empty-kicker">Host desk</p>
@@ -289,7 +310,9 @@ export function renderBoardHtml(
     !episode
       ? renderWaitingRundown()
       : rows.length === 0
-        ? `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
+        ? canCharge
+          ? renderOpenEmptyRundown(episode)
+          : `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
         : `<div class="rundown" data-rundown>
     <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
     ${rows.map((row) => renderGuestCard(row, now)).join("\n    ")}
@@ -305,6 +328,7 @@ ${renderClaim({
   episode,
   canCharge,
   defaultBid: defaultClaimBidUsd(rows),
+  emptyBoard: rows.length === 0,
 })}
 ${rundown}
 </div>

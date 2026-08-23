@@ -207,7 +207,8 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   margin: 0; padding: 1.15rem 1rem; text-align: center; color: var(--muted);
   border: 1px dashed var(--line); background: rgb(0 0 0 / 0.15);
 }
-.empty.waiting { display: grid; gap: 0.35rem; justify-items: center; }
+.empty.waiting,
+.empty.open-seat { display: grid; gap: 0.35rem; justify-items: center; }
 .empty-kicker {
   margin: 0;
   font-family: var(--mono);
@@ -222,7 +223,8 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   font-weight: 650;
   letter-spacing: -0.02em;
 }
-.empty.waiting p { margin: 0; max-width: 28rem; }
+.empty.waiting p,
+.empty.open-seat p { margin: 0; max-width: 28rem; }
 .empty-path a { color: var(--lamp); text-decoration: underline; }
 .host-open {
   display: grid; gap: 0.4rem; justify-items: center;

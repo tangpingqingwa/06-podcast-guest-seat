@@ -179,6 +179,9 @@ if [[ -f package.json ]]; then
   grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
   grep -q 'data-guest-skip' src/http/routes/pages.ts || fail "host desk missing guest-skip"
   grep -q 'Guests skip this' src/http/routes/pages.ts || fail "host desk missing guests-skip copy"
+  grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
+  grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
+  grep -q 'takes #1' src/http/routes/pages.ts || fail "fresh-open board missing \$5 takes #1"
   grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
   if grep -Eqi 'featured guest|play count|followers' src/http/routes/pages.ts src/views/skin.ts; then
     fail "product UI must not invent featured-guest art or play counts"
@@ -325,6 +328,8 @@ if [[ -f package.json ]]; then
     || fail "guest-skip host-desk test did not run"
   grep -q 'POST /host/open from the desk opens a guest-seat episode' "$test_log" \
     || fail "host-open desk test did not run"
+  grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
+    || fail "open-seat first-guest test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
