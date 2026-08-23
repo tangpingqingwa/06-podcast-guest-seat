@@ -52,7 +52,7 @@ guest.example.com {
 curl -fsS "http://127.0.0.1:${PORT:-3000}/healthz"
 ```
 
-Public board (English UI): `/`, `/about`, `/rules`. Clicks: `GET /go/:listingId`. Host veto is on by default for a guest-seat episode.
+Public board (English UI): `/`, `/about`, `/rules`. Clicks: `GET /go/:listingId`. With no episode open, `/` shows a host desk (`POST /host/open`) so the first-time host can unlock Polar. Host veto is on by default for a guest-seat episode.
 
 ## Enable live Polar
 

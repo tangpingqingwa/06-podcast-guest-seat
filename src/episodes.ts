@@ -49,6 +49,67 @@ export function defaultVetoEnabled(seatKind: SeatKind): boolean {
   return seatKind === "guest_seat";
 }
 
+export const DEFAULT_SHOW_ID = "show_english";
+
+export type EpisodeErrorCode = "episode_already_open" | "invalid_open";
+
+const EPISODE_STATUS: Record<EpisodeErrorCode, number> = {
+  episode_already_open: 409,
+  invalid_open: 400,
+};
+
+export class EpisodeError extends Error {
+  readonly code: EpisodeErrorCode;
+  readonly statusCode: number;
+
+  constructor(code: EpisodeErrorCode, message: string) {
+    super(message);
+    this.name = "EpisodeError";
+    this.code = code;
+    this.statusCode = EPISODE_STATUS[code];
+  }
+}
+
+export function countEpisodes(db: AppDb): number {
+  const row = db.prepare<[], { n: number }>("SELECT COUNT(*) AS n FROM episodes").get();
+  return row?.n ?? 0;
+}
+
+export function nextEpisodeLabel(db: AppDb): string {
+  return `Episode ${countEpisodes(db) + 1}`;
+}
+
+/** Open the next empty board. Refuses when an unlocked episode already exists. */
+export function openNextEpisode(
+  db: AppDb,
+  input: {
+    showId?: string;
+    label?: string;
+    seatKind?: SeatKind;
+    opensAt?: string;
+  } = {},
+): Episode {
+  const current = getCurrentEpisode(db);
+  if (current && current.lockedAt === null) {
+    throw new EpisodeError(
+      "episode_already_open",
+      "an unlocked episode already accepts bids",
+    );
+  }
+  const seatKind = input.seatKind ?? "guest_seat";
+  if (!isSeatKind(seatKind)) {
+    throw new EpisodeError("invalid_open", "seatKind must be guest_seat or sixty_second_open");
+  }
+  const showId = input.showId?.trim() || DEFAULT_SHOW_ID;
+  const label = input.label?.trim() || nextEpisodeLabel(db);
+  return createEpisode(db, {
+    showId,
+    label,
+    seatKind,
+    opensAt: input.opensAt?.trim() || new Date().toISOString(),
+  });
+}
+
 export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
   if (!isSeatKind(input.seatKind)) {
     throw new Error(`invalid seatKind: ${input.seatKind}`);

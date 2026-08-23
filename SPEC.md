@@ -159,6 +159,7 @@ GET  /go/:listingId            302 to stripped siteUrl; increment public clicks
 GET  /healthz                  200 if process up
 POST /checkout                 start Polar (or fixture) checkout for a bid / raise
 POST /webhooks/polar           Polar payment completed → claim rank
+POST /host/open                host session; open the next empty episode
 POST /host/veto                host session; only if vetoEnabled
 POST /host/lock                lock the episode
 ```

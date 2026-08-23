@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
-import { createEpisode } from "../src/episodes.js";
+import { createEpisode, getCurrentEpisode } from "../src/episodes.js";
+import { DEV_HOST_SESSION_SECRET } from "../src/http/routes/host.js";
 import { getListing, insertListing } from "../src/listings.js";
 
 function memoryDb() {
@@ -167,6 +168,119 @@ test("GET / with no episode points first-time guests at when the next seat opens
   assert.match(about.body, /The host opens each episode/);
   assert.match(about.body, /Polar cannot charge/);
   assert.match(about.body, /first paid bid of at least \$5 takes #1/);
+});
+
+test("GET / with no episode shows a first-time host desk to open the next seat", async () => {
+  const app = await buildApp({ hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  assert.match(body, /data-host-open/);
+  assert.match(body, /Open the next episode so guests can bid/);
+  assert.match(body, /action="\/host\/open"/);
+  assert.match(body, /Open guest seat/);
+  assert.match(body, /name="session"/);
+  assert.match(body, /name="seatKind" value="guest_seat"/);
+  assert.match(body, /data-waiting-on-host/);
+  assert.match(body, /Polar cannot charge yet/);
+  assert.match(body, /disabled/);
+  assert.doesNotMatch(body, /name="episodeId"/);
+});
+
+test("POST /host/open from the desk opens a guest-seat episode so Polar can charge", async () => {
+  const db = memoryDb();
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+
+  const missing = await app.inject({
+    method: "POST",
+    url: "/host/open",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html" },
+    payload: "label=Episode%201&seatKind=guest_seat",
+  });
+  assert.equal(missing.statusCode, 401);
+  assert.match(missing.body, /unauthorized/);
+  assert.match(missing.body, /Polar cannot charge yet/);
+  assert.equal(getCurrentEpisode(db), undefined);
+
+  const opened = await app.inject({
+    method: "POST",
+    url: "/host/open",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html" },
+    payload: `label=Episode%201&seatKind=guest_seat&session=${DEV_HOST_SESSION_SECRET}`,
+  });
+  assert.equal(opened.statusCode, 303);
+  assert.equal(opened.headers.location, "/");
+  const episode = getCurrentEpisode(db);
+  assert.ok(episode);
+  assert.equal(episode.label, "Episode 1");
+  assert.equal(episode.seatKind, "guest_seat");
+  assert.equal(episode.vetoEnabled, true);
+  assert.equal(episode.lockedAt, null);
+
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  assert.match(board.body, /Episode 1/);
+  assert.match(board.body, /data-episode-open="true"/);
+  assert.match(board.body, /Host veto is on \(default on for guest seat\)/);
+  assert.match(board.body, /name="episodeId"/);
+  assert.doesNotMatch(board.body, /data-host-open/);
+  assert.doesNotMatch(board.body, /data-waiting-on-host/);
+  assert.doesNotMatch(board.body, /name="bidUsd"[^>]*disabled/);
+  assert.match(board.body, />Outbid<\/button>/);
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload: `episodeId=${episode.id}&name=Ada%20Lovelace&siteUrl=https%3A%2F%2Fada.example%2Fnotes&oneLiner=Notes%20on%20the%20engine.&bidUsd=5`,
+  });
+  assert.equal(checkout.statusCode, 303);
+  assert.match(String(checkout.headers.location ?? ""), /\/checkout\/complete\?checkoutId=/);
+
+  const again = await app.inject({
+    method: "POST",
+    url: "/host/open",
+    headers: { "content-type": "application/json" },
+    payload: { session: DEV_HOST_SESSION_SECRET, label: "Episode 2" },
+  });
+  assert.equal(again.statusCode, 409);
+  assert.deepEqual(again.json(), { error: "episode_already_open" });
+});
+
+test("GET / after lock keeps the host desk so the next empty episode can open", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_locked",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    lockedAt: "2026-08-22T12:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_booked",
+    episodeId: episode.id,
+    name: "Booked Co",
+    siteUrl: "https://booked.example/",
+    oneLiner: "Highest remaining eligible bid.",
+    bidUsd: 9,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  assert.match(board.body, /data-host-open/);
+  assert.match(board.body, /Open guest seat/);
+  assert.match(board.body, /Booked Co/);
+  assert.match(board.body, /disabled/);
+  assert.match(board.body, /This episode is locked/);
 });
 
 test("studio rundown is a guest card, not a table: name, one-liner, site, bid, veto", async () => {

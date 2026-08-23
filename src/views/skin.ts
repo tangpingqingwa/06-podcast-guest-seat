@@ -224,6 +224,23 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 }
 .empty.waiting p { margin: 0; max-width: 28rem; }
 .empty-path a { color: var(--lamp); text-decoration: underline; }
+.host-open {
+  display: grid; gap: 0.4rem; justify-items: center;
+  margin: 0; padding: 1.15rem 1rem; text-align: center;
+  border: 1px dashed var(--dash); background: rgb(0 0 0 / 0.15);
+}
+.host-open .empty-kicker, .host-open .empty-lead { margin: 0; }
+.host-open-note { margin: 0; max-width: 28rem; color: var(--muted); font-size: 0.92rem; }
+.host-open-form {
+  margin-top: 0.45rem; display: grid; gap: 0.5rem; width: min(100%, 22rem);
+}
+.host-open-form input {
+  width: 100%; height: 2.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--studio-2);
+  padding: 0 0.8rem;
+}
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }

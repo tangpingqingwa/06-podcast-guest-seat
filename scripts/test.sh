@@ -219,6 +219,8 @@ if [[ -f package.json ]]; then
   grep -q 'bookedGuest' src/veto.ts || fail "src/veto.ts missing bookedGuest"
   grep -q '/host/veto' src/http/routes/host.ts || fail "host route missing /host/veto"
   grep -q '/host/lock' src/http/routes/host.ts || fail "host route missing /host/lock"
+  grep -q '/host/open' src/http/routes/host.ts || fail "host route missing /host/open"
+  grep -q 'openNextEpisode' src/episodes.ts || fail "src/episodes.ts missing openNextEpisode"
   grep -q 'HOST_SESSION_SECRET' src/http/routes/host.ts \
     || fail "host route missing HOST_SESSION_SECRET"
   grep -q 'hostRoutes' src/app.ts || fail "src/app.ts must register hostRoutes"
@@ -315,6 +317,10 @@ if [[ -f package.json ]]; then
     || fail "no-episode claim chrome test did not run"
   grep -q 'GET / with no episode points first-time guests' "$test_log" \
     || fail "no-episode waiting-path test did not run"
+  grep -q 'GET / with no episode shows a first-time host desk' "$test_log" \
+    || fail "no-episode host-desk test did not run"
+  grep -q 'POST /host/open from the desk opens a guest-seat episode' "$test_log" \
+    || fail "host-open desk test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
