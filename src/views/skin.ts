@@ -264,6 +264,29 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   font-weight: 700;
   letter-spacing: 0.04em;
 }
+.host-open-form .lock-episode {
+  justify-self: stretch;
+  height: 2.7rem;
+  border: 1px solid var(--on-air);
+  border-radius: 0.35rem;
+  background: var(--on-air);
+  color: #ffd7cf;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.host-lock {
+  justify-items: stretch;
+  text-align: left;
+  border-style: solid;
+  border-color: var(--lamp);
+  background: #241811;
+  box-shadow: inset 3px 0 0 var(--on-air);
+}
+.host-lock .empty-kicker,
+.host-lock .empty-lead,
+.host-lock .host-open-note { justify-self: start; }
+.host-lock .empty-lead { color: #f3ead8; }
 .host-open[data-open-next] {
   justify-items: stretch;
   text-align: left;

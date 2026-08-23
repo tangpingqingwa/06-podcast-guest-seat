@@ -265,6 +265,7 @@ test("POST /host/open from the desk opens a guest-seat episode so Polar can char
   assert.match(board.body, /\$5 takes #1/);
   assert.match(board.body, /Polar can charge/);
   assert.doesNotMatch(board.body, /data-host-open/);
+  assert.doesNotMatch(board.body, /data-host-lock/);
   assert.doesNotMatch(board.body, /data-host-only/);
   assert.doesNotMatch(board.body, /data-guest-skip/);
   assert.doesNotMatch(board.body, /data-waiting-on-host/);
@@ -338,6 +339,9 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.doesNotMatch(board.body, /Seat is open/);
   assert.match(board.body, /class="outbid" disabled/);
   assert.doesNotMatch(board.body, /class="open-next outbid"/);
+  assert.doesNotMatch(board.body, /data-host-lock/);
+  assert.doesNotMatch(board.body, /action="\/host\/lock"/);
+  assert.doesNotMatch(board.body, /Lock this episode/);
 });
 
 test("GET / after lock makes opening the next empty episode the host action, not a bid", async () => {
@@ -445,6 +449,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.doesNotMatch(body, /No seat for sale/);
   assert.doesNotMatch(body, /Skip the host desk/);
   assert.doesNotMatch(body, /data-host-open/);
+  assert.doesNotMatch(body, /data-host-lock/);
   assert.doesNotMatch(body, / data-open-next/);
   assert.doesNotMatch(body, /data-guest-skip/);
   assert.doesNotMatch(body, /Polar cannot charge on N\+1 until you open it/);
@@ -505,6 +510,7 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.doesNotMatch(body, /No open episode yet/);
   assert.doesNotMatch(body, /No seat for sale/);
   assert.doesNotMatch(body, /data-host-open/);
+  assert.doesNotMatch(body, /data-host-lock/);
   assert.doesNotMatch(body, /data-guest-skip/);
   assert.doesNotMatch(body, / data-next-seat/);
   assert.doesNotMatch(body, /Claim Episode 1 for/);
@@ -582,6 +588,153 @@ test("studio rundown is a guest card, not a table: name, one-liner, site, bid, v
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   assert.doesNotMatch(body, /utm_source/);
+});
+
+test("GET / on an occupied open episode makes locking the episode the host action", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_lock_desk",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: episode.id,
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  insertListing(db, {
+    id: "lst_veto",
+    episodeId: episode.id,
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  const body = board.body;
+  const deskAt = body.indexOf("data-host-lock");
+  const claimAt = body.indexOf('id="claim"');
+  const lockBtnAt = body.indexOf('class="lock-episode"');
+  const outbidAt = body.indexOf("Outbid");
+  assert.notEqual(deskAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(lockBtnAt, -1);
+  assert.ok(deskAt < claimAt);
+  assert.ok(lockBtnAt < outbidAt || outbidAt === -1);
+  assert.match(body, /data-host-only/);
+  assert.match(body, /data-guest-skip/);
+  assert.match(body, /Guests skip this\. This desk is for the host — it is not a bid\./);
+  assert.match(body, /Lock episode/);
+  assert.match(body, /Lock Episode 12 — book Ada Lovelace\./);
+  assert.match(body, /Lock books Ada Lovelace at \$12, the highest remaining eligible bid/);
+  assert.match(body, /Vetoed rows stay visible/);
+  assert.match(body, /Polar cannot charge after lock/);
+  assert.match(body, /action="\/host\/lock"/);
+  assert.match(body, /name="episodeId" value="ep_lock_desk"/);
+  assert.match(body, /Lock Episode 12/);
+  assert.match(body, /class="lock-episode"/);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /Ada Lovelace/);
+  assert.match(body, /Hard Sell Co/);
+  assert.match(body, /Vetoed: hard sell/);
+  assert.match(body, /Already on this episode\?/);
+  assert.match(body, />Outbid<\/button>/);
+  assert.doesNotMatch(body, /data-host-open/);
+  assert.doesNotMatch(body, /action="\/host\/open"/);
+  assert.doesNotMatch(body, /Open guest seat/);
+  assert.doesNotMatch(body, /class="lock-episode outbid"/);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, /Seat is open/);
+  assert.doesNotMatch(body, /This episode is locked/);
+});
+
+test("POST /host/lock from the desk locks the occupied episode so Polar cannot charge", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_html_lock",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_book",
+    episodeId: episode.id,
+    name: "Booked Co",
+    siteUrl: "https://booked.example/",
+    oneLiner: "Highest remaining eligible bid.",
+    bidUsd: 9,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+
+  const missing = await app.inject({
+    method: "POST",
+    url: "/host/lock",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html" },
+    payload: "episodeId=ep_html_lock",
+  });
+  assert.equal(missing.statusCode, 401);
+  assert.match(missing.body, /unauthorized/);
+  assert.match(missing.body, /Polar can still charge until this episode locks/);
+  assert.equal(getCurrentEpisode(db)?.lockedAt, null);
+
+  const locked = await app.inject({
+    method: "POST",
+    url: "/host/lock",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html" },
+    payload: `episodeId=ep_html_lock&session=${DEV_HOST_SESSION_SECRET}`,
+  });
+  assert.equal(locked.statusCode, 303);
+  assert.equal(locked.headers.location, "/");
+  const lockedEpisode = getCurrentEpisode(db);
+  assert.ok(lockedEpisode);
+  assert.equal(lockedEpisode.id, "ep_html_lock");
+  assert.ok(lockedEpisode.lockedAt);
+
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  assert.match(board.body, /data-episode-open="false"/);
+  assert.match(board.body, /This episode is locked/);
+  assert.match(board.body, /Booked Co/);
+  assert.match(board.body, /data-host-open/);
+  assert.match(board.body, /Open Episode 13/);
+  assert.match(board.body, /class="outbid" disabled/);
+  assert.doesNotMatch(board.body, /data-host-lock/);
+  assert.doesNotMatch(board.body, /action="\/host\/lock"/);
+  assert.doesNotMatch(board.body, /data-claim-live/);
+  assert.doesNotMatch(board.body, /data-open-seat/);
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_html_lock&name=Late%20Co&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Should%20not%20bid.&bidUsd=20",
+  });
+  assert.equal(checkout.statusCode, 409);
+  assert.match(checkout.body, /episode_locked/);
+  assert.match(checkout.body, /Polar did not charge/);
 });
 
 test("SPEC 15: public click /go/:id 302 + clicks increment", async () => {
