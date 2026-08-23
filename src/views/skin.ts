@@ -207,6 +207,23 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   margin: 0; padding: 1.15rem 1rem; text-align: center; color: var(--muted);
   border: 1px dashed var(--line); background: rgb(0 0 0 / 0.15);
 }
+.empty.waiting { display: grid; gap: 0.35rem; justify-items: center; }
+.empty-kicker {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.empty-lead {
+  margin: 0;
+  color: #f3ead8;
+  font-size: 1.12rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.empty.waiting p { margin: 0; max-width: 28rem; }
+.empty-path a { color: var(--lamp); text-decoration: underline; }
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }

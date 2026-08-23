@@ -140,10 +140,33 @@ test("GET / with no episode keeps the claim visible; Polar cannot charge yet", a
   assert.match(body, /data-episode-open="false"/);
   assert.match(body, /Show ticket/);
   assert.match(body, /bid-field/);
+  assert.match(body, /data-waiting-on-host/);
+  assert.match(body, /No seat for sale/);
+  assert.match(body, /The next seat is not for sale/);
+  assert.match(body, /No seat is for sale until the host opens an episode/);
+  assert.match(body, /\/about#when-open/);
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   assert.doesNotMatch(body, /followers/i);
   assert.match(body, /disabled/);
+});
+
+test("GET / with no episode points first-time guests at when the next seat opens", async () => {
+  const app = await buildApp();
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  assert.match(board.body, /data-waiting-on-host/);
+  assert.match(board.body, /href="\/about#when-open"/);
+  assert.doesNotMatch(board.body, /Already on this episode\?/);
+  assert.match(board.body, /disabled/);
+
+  const about = await app.inject({ method: "GET", url: "/about" });
+  assert.equal(about.statusCode, 200);
+  assert.match(about.body, /id="when-open"/);
+  assert.match(about.body, /The host opens each episode/);
+  assert.match(about.body, /Polar cannot charge/);
+  assert.match(about.body, /first paid bid of at least \$5 takes #1/);
 });
 
 test("studio rundown is a guest card, not a table: name, one-liner, site, bid, veto", async () => {
