@@ -127,6 +127,18 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .claim[data-next-seat] .claim-note,
 .claim[data-next-seat] .form-hint { margin-left: 0; text-align: left; }
 .claim[data-next-seat] .outbid { justify-self: start; }
+.claim[data-claim-locked] {
+  padding: 0.35rem 0 0.55rem;
+}
+.claim[data-claim-locked] .claim-title {
+  justify-content: flex-start;
+  text-align: left;
+}
+.claim[data-claim-locked] .claim-note,
+.claim[data-claim-locked] .form-hint {
+  margin-left: 0;
+  text-align: left;
+}
 .claim-title {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.5rem;
   margin: 0;
