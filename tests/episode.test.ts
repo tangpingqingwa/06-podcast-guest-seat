@@ -7,6 +7,7 @@ import {
   EpisodeError,
   getCurrentEpisode,
   getEpisode,
+  getLatestLockedEpisode,
   nextEpisodeLabel,
   openNextEpisode,
 } from "../src/episodes.js";
@@ -153,6 +154,9 @@ test("openNextEpisode after lock opens an empty N+1 board", () => {
   assert.deepEqual(listListingsForEpisode(db, next.id), []);
   assert.equal(listListingsForEpisode(db, first.id)[0]?.id, "lst_old");
   assert.equal(getCurrentEpisode(db)?.id, next.id);
+  const prior = getLatestLockedEpisode(db, next.id);
+  assert.ok(prior);
+  assert.equal(prior.id, first.id);
 });
 
 test("new episode does not carry old bids", () => {

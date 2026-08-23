@@ -167,6 +167,31 @@ export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
 
 const EPISODE_COLUMNS = `id, show_id, label, seat_kind, veto_enabled, opens_at, locks_at, locked_at`;
 
+/** Latest locked episode, optionally excluding one id (the current open board). */
+export function getLatestLockedEpisode(
+  db: AppDb,
+  exceptId?: string,
+): Episode | undefined {
+  const row = exceptId
+    ? db
+        .prepare<[string], EpisodeRow>(
+          `SELECT ${EPISODE_COLUMNS} FROM episodes
+           WHERE locked_at IS NOT NULL AND id != ?
+           ORDER BY opens_at DESC, id DESC
+           LIMIT 1`,
+        )
+        .get(exceptId)
+    : db
+        .prepare<[], EpisodeRow>(
+          `SELECT ${EPISODE_COLUMNS} FROM episodes
+           WHERE locked_at IS NOT NULL
+           ORDER BY opens_at DESC, id DESC
+           LIMIT 1`,
+        )
+        .get();
+  return row ? mapEpisode(row) : undefined;
+}
+
 export function getEpisode(db: AppDb, id: string): Episode | undefined {
   const row = db
     .prepare<[string], EpisodeRow>(

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   getCurrentEpisode,
   getEpisode,
+  getLatestLockedEpisode,
   nextEpisodeLabel,
   type Episode,
 } from "../../episodes.js";
@@ -224,29 +225,41 @@ function renderClaim(input: {
   canCharge: boolean;
   defaultBid: number;
   emptyBoard: boolean;
+  nextSeat?: boolean;
 }): string {
-  const seat = input.episode ? seatLabel(input.episode.seatKind) : "guest seat";
-  const openEmpty = Boolean(input.episode && input.canCharge && input.emptyBoard);
-  const note = !input.episode
+  const episode = input.episode;
+  const seat = episode ? seatLabel(episode.seatKind) : "guest seat";
+  const openEmpty = Boolean(episode && input.canCharge && input.emptyBoard);
+  const nextSeat = Boolean(openEmpty && input.nextSeat && episode);
+  const label = episode ? escapeHtml(episode.label) : "";
+  const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : !input.canCharge
       ? "Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty."
-      : openEmpty
-        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(input.episode)}`
-        : `Rank is the bid. ${vetoNote(input.episode)}`;
-  const hint = !input.episode
+      : nextSeat
+        ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${vetoNote(episode)}`
+        : openEmpty
+          ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(episode)}`
+          : `Rank is the bid. ${vetoNote(episode)}`;
+  const hint = !episode
     ? "No seat is for sale until the host opens an episode."
     : !input.canCharge
       ? "This episode is locked. The next episode opens empty — prior bids do not carry."
-      : openEmpty
-        ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
-        : "Already on this episode? Enter the same site and raise. You pay only the difference.";
+      : nextSeat
+        ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
+        : openEmpty
+          ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
+          : "Already on this episode? Enter the same site and raise. You pay only the difference.";
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
-  return `<section class="claim" id="claim"${live}${openSeat}>
+  const nextMark = nextSeat ? " data-next-seat" : "";
+  const title = nextSeat
+    ? `Claim ${label} for`
+    : `Claim the ${escapeHtml(seat)} for`;
+  return `<section class="claim" id="claim"${live}${openSeat}${nextMark}>
   <h1 class="claim-title">
-    <span>Claim the ${escapeHtml(seat)} for</span>
+    <span>${title}</span>
     <span class="bid-stepper">
       <button type="button" class="step" data-bid-step="-1" aria-label="Decrease bid by one dollar"${disabled}>−</button>
       <label class="bid-field">
@@ -258,7 +271,7 @@ function renderClaim(input: {
   </h1>
   <p class="claim-note">${note}</p>
   <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
-    ${input.episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(input.episode.id)}"/>` : ""}
+    ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
     <div class="fields">
       <input name="name" required maxlength="80" placeholder="Name or company"${disabled}/>
       <input name="siteUrl" type="url" required placeholder="https://your-site"${disabled}/>
@@ -280,11 +293,16 @@ function renderWaitingRundown(): string {
 </section>`;
 }
 
-function renderOpenEmptyRundown(episode: Episode): string {
-  return `<section class="empty open-seat" data-empty-board data-open-seat>
-  <p class="empty-kicker">Seat is open</p>
+function renderOpenEmptyRundown(episode: Episode, nextSeat = false): string {
+  const label = escapeHtml(episode.label);
+  const kicker = nextSeat ? `${label} is open` : "Seat is open";
+  const body = nextSeat
+    ? `No paid listings on ${label} yet. Polar can charge. Outbid claims this empty ${escapeHtml(seatLabel(episode.seatKind))}. Prior bids do not carry.`
+    : `No paid listings on this episode yet. Polar can charge. Outbid claims the ${escapeHtml(seatLabel(episode.seatKind))} after payment.`;
+  return `<section class="empty open-seat" data-empty-board data-open-seat${nextSeat ? " data-next-seat" : ""}>
+  <p class="empty-kicker">${kicker}</p>
   <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
-  <p>No paid listings on this episode yet. Polar can charge. Outbid claims the ${escapeHtml(seatLabel(episode.seatKind))} after payment.</p>
+  <p>${body}</p>
 </section>`;
 }
 
@@ -324,15 +342,17 @@ export function renderBoardHtml(
   now: Date = new Date(),
   path: string = "/",
   nextLabel: string = "Episode 1",
+  priorLocked?: Episode,
 ): string {
   const canCharge = Boolean(episode && episode.lockedAt === null);
   const rows = episode ? boardRows(listings) : [];
+  const nextSeat = Boolean(canCharge && rows.length === 0 && priorLocked);
   const rundown =
     !episode
       ? renderWaitingRundown()
       : rows.length === 0
         ? canCharge
-          ? renderOpenEmptyRundown(episode)
+          ? renderOpenEmptyRundown(episode, nextSeat)
           : `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
         : `<div class="rundown" data-rundown>
     <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
@@ -340,19 +360,28 @@ export function renderBoardHtml(
   </div>`;
 
   const lockedEpisode = episode && !canCharge ? episode : undefined;
+  const claim = renderClaim({
+    episode,
+    canCharge,
+    defaultBid: defaultClaimBidUsd(rows),
+    emptyBoard: rows.length === 0,
+    nextSeat,
+  });
+  const desk = !canCharge ? renderHostOpenDesk({ nextLabel, lockedEpisode }) : "";
+  const ticket = renderShowTicket(episode);
+  const studio = nextSeat
+    ? `${claim}
+${ticket}
+${rundown}`
+    : `${ticket}
+${desk}
+${claim}
+${rundown}`;
   return renderLayout({
     title: episode ? `${episode.label} · Podcast Guest Seat` : "Podcast Guest Seat",
     path,
     body: `<div class="studio">
-${renderShowTicket(episode)}
-${!canCharge ? renderHostOpenDesk({ nextLabel, lockedEpisode }) : ""}
-${renderClaim({
-  episode,
-  canCharge,
-  defaultBid: defaultClaimBidUsd(rows),
-  emptyBoard: rows.length === 0,
-})}
-${rundown}
+${studio}
 </div>
 <script>
   (function () {
@@ -445,9 +474,22 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
   app.get(BOARD_PATH, async (_request, reply) => {
     const episode = getCurrentEpisode(app.db);
     const listings = episode ? listListingsForEpisode(app.db, episode.id) : [];
+    const priorLocked =
+      episode && episode.lockedAt === null
+        ? getLatestLockedEpisode(app.db, episode.id)
+        : undefined;
     return reply
       .type("text/html; charset=utf-8")
-      .send(renderBoardHtml(episode, listings, new Date(), "/", nextEpisodeLabel(app.db)));
+      .send(
+        renderBoardHtml(
+          episode,
+          listings,
+          new Date(),
+          "/",
+          nextEpisodeLabel(app.db),
+          priorLocked,
+        ),
+      );
   });
 
   app.get<{ Params: { episodeId: string } }>(
@@ -464,6 +506,10 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
         );
       }
       const listings = listListingsForEpisode(app.db, episode.id);
+      const priorLocked =
+        episode.lockedAt === null
+          ? getLatestLockedEpisode(app.db, episode.id)
+          : undefined;
       return reply
         .type("text/html; charset=utf-8")
         .send(
@@ -473,6 +519,7 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
             new Date(),
             `/e/${episode.id}`,
             nextEpisodeLabel(app.db),
+            priorLocked,
           ),
         );
     },
