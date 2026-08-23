@@ -1,15 +1,22 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import {
+  EpisodeError,
+  isSeatKind,
+  openNextEpisode,
+} from "../../episodes.js";
+import {
   lockEpisode,
   setVetoEnabled,
   VetoError,
   vetoListing,
 } from "../../veto.js";
+import { renderHostOpenErrorHtml } from "./pages.js";
 
 export const HOST_VETO_PATH = "/host/veto" as const;
 export const HOST_LOCK_PATH = "/host/lock" as const;
 export const HOST_VETO_ENABLED_PATH = "/host/veto-enabled" as const;
+export const HOST_OPEN_PATH = "/host/open" as const;
 
 /** Fixture / local tests only. Production must set `HOST_SESSION_SECRET`. */
 export const DEV_HOST_SESSION_SECRET = "dev-host-session";
@@ -60,24 +67,58 @@ export function readHostSession(request: FastifyRequest): string | undefined {
   return undefined;
 }
 
+function wantsHtml(request: FastifyRequest): boolean {
+  const type = String(request.headers["content-type"] ?? "");
+  const accept = String(request.headers.accept ?? "");
+  return (
+    type.includes("application/x-www-form-urlencoded") ||
+    (/\btext\/html\b/.test(accept) && !/\bapplication\/json\b/.test(accept))
+  );
+}
+
 function requireHostSession(
   request: FastifyRequest,
   reply: FastifyReply,
   expected: string,
+  asHtml = false,
 ): boolean {
   if (!expected) {
-    void reply.code(503).send({ error: "host_unconfigured" });
+    if (asHtml) {
+      void reply
+        .code(503)
+        .type("text/html; charset=utf-8")
+        .send(renderHostOpenErrorHtml("host_unconfigured"));
+    } else {
+      void reply.code(503).send({ error: "host_unconfigured" });
+    }
     return false;
   }
   if (!sessionMatches(readHostSession(request), expected)) {
-    void reply.code(401).send({ error: "unauthorized" });
+    if (asHtml) {
+      void reply
+        .code(401)
+        .type("text/html; charset=utf-8")
+        .send(renderHostOpenErrorHtml("unauthorized"));
+    } else {
+      void reply.code(401).send({ error: "unauthorized" });
+    }
     return false;
   }
   return true;
 }
 
-function sendHostError(reply: FastifyReply, err: unknown): FastifyReply {
-  if (err instanceof VetoError) {
+function sendHostError(
+  reply: FastifyReply,
+  err: unknown,
+  asHtml = false,
+): FastifyReply {
+  if (err instanceof VetoError || err instanceof EpisodeError) {
+    if (asHtml) {
+      return reply
+        .code(err.statusCode)
+        .type("text/html; charset=utf-8")
+        .send(renderHostOpenErrorHtml(err.code));
+    }
     return reply.code(err.statusCode).send({ error: err.code });
   }
   throw err;
@@ -97,6 +138,44 @@ function parseVetoEnabled(value: unknown): boolean | undefined {
 }
 
 export const hostRoutes: FastifyPluginAsync = async (app) => {
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      const raw = typeof body === "string" ? body : body.toString("utf8");
+      done(null, Object.fromEntries(new URLSearchParams(raw)));
+    },
+  );
+
+  app.post(HOST_OPEN_PATH, async (request, reply) => {
+    const html = wantsHtml(request);
+    if (!requireHostSession(request, reply, app.hostSessionSecret, html)) {
+      return;
+    }
+    const body = isRecord(request.body) ? request.body : {};
+    const label = readString(body.label);
+    const seatKindRaw = readString(body.seatKind);
+    const seatKind = seatKindRaw ?? "guest_seat";
+    if (!isSeatKind(seatKind)) {
+      if (html) {
+        return reply
+          .code(400)
+          .type("text/html; charset=utf-8")
+          .send(renderHostOpenErrorHtml("invalid_open"));
+      }
+      return reply.code(400).send({ error: "invalid_open" });
+    }
+    try {
+      const episode = openNextEpisode(app.db, { label, seatKind });
+      if (html) {
+        return reply.redirect("/", 303);
+      }
+      return { ok: true, episode };
+    } catch (err) {
+      return sendHostError(reply, err, html);
+    }
+  });
+
   app.post(HOST_VETO_PATH, async (request, reply) => {
     if (!requireHostSession(request, reply, app.hostSessionSecret)) {
       return;

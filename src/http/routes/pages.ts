@@ -261,6 +261,20 @@ function renderWaitingRundown(): string {
 </section>`;
 }
 
+function renderHostOpenDesk(): string {
+  return `<section class="host-open" data-host-open>
+  <p class="empty-kicker">Host desk</p>
+  <p class="empty-lead">Open the next episode so guests can bid.</p>
+  <p class="host-open-note">Guest seat opens with host veto on. Polar cannot charge until this board exists.</p>
+  <form id="host-open-form" class="host-open-form" method="post" action="/host/open">
+    <input type="hidden" name="seatKind" value="guest_seat"/>
+    <input name="label" maxlength="80" placeholder="Episode 1" autocomplete="off"/>
+    <input name="session" type="password" required placeholder="Host session" autocomplete="current-password"/>
+    <button type="submit" class="outbid">Open guest seat</button>
+  </form>
+</section>`;
+}
+
 export function renderBoardHtml(
   episode: Episode | undefined,
   listings: readonly Listing[],
@@ -284,6 +298,7 @@ export function renderBoardHtml(
     path,
     body: `<div class="studio">
 ${renderShowTicket(episode)}
+${!canCharge ? renderHostOpenDesk() : ""}
 ${renderClaim({
   episode,
   canCharge,
@@ -317,7 +332,7 @@ export function renderAboutHtml(): string {
     body: `<article class="doc">
 <h1>About</h1>
 <p>This is a public auction for the next episode’s <strong>guest seat</strong> or a <strong>60-second open</strong>. People and companies bid whole US dollars. Rank is the bid — nothing else.</p>
-<p id="when-open">The host opens each episode. Until that board exists, the claim on <a href="/">/</a> is a preview — Polar cannot charge. When episode N opens, the first paid bid of at least $5 takes #1.</p>
+<p id="when-open">The host opens each episode from the desk on <a href="/">/</a>. Until that board exists, the claim is a preview — Polar cannot charge. When episode N opens, the first paid bid of at least $5 takes #1.</p>
 <p>Cadence is <strong>per episode</strong>. When the host locks episode N, the highest remaining eligible bid is booked. Episode N+1 opens empty. Prior bids do not carry.</p>
 <p>The host can still say no. <strong>Veto defaults on for guest seat</strong> and off for a 60-second open. A vetoed row stays visible with a public reason.</p>
 <p>Clicks go through this board so the click count is public. Tracking query strings are stripped. Chat invites and adult platforms are rejected.</p>
@@ -361,6 +376,18 @@ export function renderCheckoutErrorHtml(code: string): string {
     body: `<article class="doc">
 <h1>Checkout did not start</h1>
 <p class="empty">${escapeHtml(code)}. Polar did not charge.</p>
+<p><a href="/">Back to the rundown</a></p>
+</article>`,
+  });
+}
+
+export function renderHostOpenErrorHtml(code: string): string {
+  return renderLayout({
+    title: "Host · Podcast Guest Seat",
+    path: "/",
+    body: `<article class="doc">
+<h1>Episode did not open</h1>
+<p class="empty">${escapeHtml(code)}. Polar cannot charge yet.</p>
 <p><a href="/">Back to the rundown</a></p>
 </article>`,
   });
