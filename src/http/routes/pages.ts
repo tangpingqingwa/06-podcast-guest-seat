@@ -151,7 +151,7 @@ function renderShowTicket(episode: Episode | undefined): string {
     <p class="ticket-kicker">Show ticket</p>
     <p class="ticket-label">No episode open</p>
     <p class="ticket-seat">guest seat</p>
-    <p class="ticket-veto">The host has not opened a board. Polar cannot charge yet.</p>
+    <p class="ticket-veto">The next seat is not for sale. Polar cannot charge yet.</p>
   </div>
   <div class="ticket-stub">
     <p class="stub-state">WAIT</p>
@@ -216,10 +216,15 @@ function renderClaim(input: {
   const note = !input.episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : !input.canCharge
-      ? "Rank is the bid. This episode is locked. Polar cannot charge."
+      ? "Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty."
       : `Rank is the bid. Host veto is ${input.episode.vetoEnabled ? "on" : "off"}${
           input.episode.seatKind === "guest_seat" ? " (default on for guest seat)" : ""
         }.`;
+  const hint = !input.episode
+    ? "No seat is for sale until the host opens an episode."
+    : !input.canCharge
+      ? "This episode is locked. The next episode opens empty — prior bids do not carry."
+      : "Already on this episode? Enter the same site and raise. You pay only the difference.";
   const disabled = input.canCharge ? "" : " disabled";
   return `<section class="claim" id="claim">
   <h1 class="claim-title">
@@ -243,7 +248,16 @@ function renderClaim(input: {
     </div>
     <button type="submit" class="outbid"${disabled}>Outbid</button>
   </form>
-  <p class="form-hint">Already on this episode? Enter the same site and raise. You pay only the difference.</p>
+  <p class="form-hint">${hint}</p>
+</section>`;
+}
+
+function renderWaitingRundown(): string {
+  return `<section class="empty waiting" data-empty-board data-waiting-on-host>
+  <p class="empty-kicker">No seat for sale</p>
+  <p class="empty-lead">No open episode yet.</p>
+  <p>The host opens the next board. Until then this claim is a preview — Polar cannot charge.</p>
+  <p class="empty-path"><a href="/about#when-open">When the next episode opens</a></p>
 </section>`;
 }
 
@@ -257,7 +271,7 @@ export function renderBoardHtml(
   const rows = episode ? boardRows(listings) : [];
   const rundown =
     !episode
-      ? `<p class="empty" data-empty-board>No open episode yet.</p>`
+      ? renderWaitingRundown()
       : rows.length === 0
         ? `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
         : `<div class="rundown" data-rundown>
@@ -303,6 +317,7 @@ export function renderAboutHtml(): string {
     body: `<article class="doc">
 <h1>About</h1>
 <p>This is a public auction for the next episode’s <strong>guest seat</strong> or a <strong>60-second open</strong>. People and companies bid whole US dollars. Rank is the bid — nothing else.</p>
+<p id="when-open">The host opens each episode. Until that board exists, the claim on <a href="/">/</a> is a preview — Polar cannot charge. When episode N opens, the first paid bid of at least $5 takes #1.</p>
 <p>Cadence is <strong>per episode</strong>. When the host locks episode N, the highest remaining eligible bid is booked. Episode N+1 opens empty. Prior bids do not carry.</p>
 <p>The host can still say no. <strong>Veto defaults on for guest seat</strong> and off for a 60-second open. A vetoed row stays visible with a public reason.</p>
 <p>Clicks go through this board so the click count is public. Tracking query strings are stripped. Chat invites and adult platforms are rejected.</p>

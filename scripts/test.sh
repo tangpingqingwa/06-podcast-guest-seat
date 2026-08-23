@@ -313,6 +313,8 @@ if [[ -f package.json ]]; then
     || fail "rules page test did not run"
   grep -q 'GET / with no episode keeps the claim visible' "$test_log" \
     || fail "no-episode claim chrome test did not run"
+  grep -q 'GET / with no episode points first-time guests' "$test_log" \
+    || fail "no-episode waiting-path test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
