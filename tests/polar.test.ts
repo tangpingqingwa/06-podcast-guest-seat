@@ -11,7 +11,7 @@ import {
 import { listListingsForEpisode } from "../src/listings.js";
 import { FixturePolar } from "../src/polar/fixture.js";
 import { LivePolar } from "../src/polar/live.js";
-import { polarLiveEnabled } from "../src/polar/port.js";
+import { polarApiBase, polarLiveEnabled } from "../src/polar/port.js";
 import { rankedListingsForEpisode } from "../src/rank.js";
 
 function memoryDb() {
@@ -86,6 +86,50 @@ test("createPolarPort is fixture; POLAR_FIXTURE_ONLY=1 wins over POLAR_LIVE", ()
   });
   assert.equal(live.kind, "live");
   assert.equal(fetched, false);
+});
+
+test("POLAR_API_BASE overrides production Polar; default is not sandbox", async () => {
+  const production = polarApiBase({});
+  const prodHost = ["api", "polar", "sh"].join(".");
+  const sandboxApi = `https://${["sandbox-api", "polar", "sh"].join(".")}`;
+  const sandboxCheckout = `https://${["sandbox", "polar", "sh"].join(".")}/checkout/chk_test`;
+  assert.equal(production, `https://${prodHost}`);
+  assert.doesNotMatch(production, /sandbox/);
+  assert.equal(polarApiBase({ POLAR_API_BASE: `${sandboxApi}/` }), sandboxApi);
+
+  const seen: string[] = [];
+  const live = new LivePolar({
+    env: {
+      POLAR_LIVE: "1",
+      POLAR_ACCESS_TOKEN: "polar_tok_test",
+      POLAR_API_BASE: sandboxApi,
+      POLAR_PRODUCT_ID: "prod_test",
+    },
+    fetch: (async (input) => {
+      seen.push(String(input));
+      return new Response(
+        JSON.stringify({
+          id: "chk_test",
+          url: sandboxCheckout,
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch,
+  });
+  const created = await live.createCheckout({
+    episodeId: "ep_live",
+    listingId: "lst_live",
+    amountUsd: 5,
+    kind: "open",
+    name: "Live Guest",
+    siteUrl: "https://live.example/",
+    oneLiner: "Must not rank until Polar pays.",
+    nextUsd: 5,
+  });
+  assert.deepEqual(seen, [`${sandboxApi}/v1/checkouts/`]);
+  assert.equal(created.checkoutId, "chk_test");
+  assert.equal(created.url, sandboxCheckout);
+  assert.doesNotMatch(created.url, /\/checkout\/complete/);
 });
 
 test("SPEC 17: POLAR_LIVE unset in test — no live Polar host", () => {

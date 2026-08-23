@@ -58,3 +58,17 @@ export function polarAccessToken(env: PolarEnv = process.env): string {
 export function polarWebhookSecret(env: PolarEnv = process.env): string {
   return env.POLAR_WEBHOOK_SECRET?.trim() ?? "";
 }
+
+export function polarProductId(env: PolarEnv = process.env): string {
+  return env.POLAR_PRODUCT_ID?.trim() ?? "";
+}
+
+/** Override with `POLAR_API_BASE`. Default is production Polar; tests must not fetch it. */
+export function polarApiBase(env: PolarEnv = process.env): string {
+  const fromEnv = env.POLAR_API_BASE?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, "");
+  }
+  const host = ["api", "polar", "sh"].join(".");
+  return `https://${host}`;
+}

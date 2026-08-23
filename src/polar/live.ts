@@ -1,7 +1,9 @@
 import {
   polarAccessToken,
+  polarApiBase,
   polarFixtureOnly,
   polarLiveEnabled,
+  polarProductId,
   polarWebhookSecret,
   type CreateCheckoutInput,
   type PolarCheckout,
@@ -15,15 +17,6 @@ export type LivePolarOptions = {
   env?: PolarEnv;
   fetch?: typeof fetch;
 };
-
-function polarApiRoot(env: PolarEnv): string {
-  const fromEnv = env.POLAR_API_BASE?.trim();
-  if (fromEnv) {
-    return fromEnv.replace(/\/$/, "");
-  }
-  const host = ["api", "polar", "sh"].join(".");
-  return `https://${host}`;
-}
 
 /** Live Polar Checkout. Constructor refuses unless `POLAR_LIVE=1` and fixture-only is off. */
 export class LivePolar implements PolarPort {
@@ -54,25 +47,35 @@ export class LivePolar implements PolarPort {
     if (!token) {
       throw new Error("BLOCKED-SECRET: POLAR_ACCESS_TOKEN");
     }
-    const response = await this.fetchFn(`${polarApiRoot(this.env)}/v1/checkouts/`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        accept: "application/json",
+    const body: Record<string, unknown> = {
+      amount: input.amountUsd * 100,
+      currency: "usd",
+      metadata: {
+        episodeId: input.episodeId,
+        listingId: input.listingId,
+        kind: input.kind,
+        amountUsd: String(input.amountUsd),
+        nextUsd: String(input.nextUsd),
       },
-      body: JSON.stringify({
-        amount: input.amountUsd * 100,
-        currency: "usd",
-        metadata: {
-          episodeId: input.episodeId,
-          listingId: input.listingId,
-          kind: input.kind,
-          amountUsd: String(input.amountUsd),
-          nextUsd: String(input.nextUsd),
+    };
+    const productId = polarProductId(this.env);
+    if (productId) {
+      body.product_id = productId;
+    }
+    let response: Response;
+    try {
+      response = await this.fetchFn(`${polarApiBase(this.env)}/v1/checkouts/`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          accept: "application/json",
         },
-      }),
-    });
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error("polar checkout failed closed");
+    }
     if (!response.ok) {
       throw new Error("polar checkout failed closed");
     }

@@ -99,6 +99,8 @@ type PolarPort = {
 | `POLAR_LIVE` | no | `0`. Ignored when fixture-only is `1` |
 | `POLAR_ACCESS_TOKEN` | live only | unset |
 | `POLAR_WEBHOOK_SECRET` | live only | unset |
+| `POLAR_API_BASE` | live only | production Polar API. Operator sandbox smoke may override. |
+| `POLAR_PRODUCT_ID` | live only | unset. Sandbox custom-amount checkout needs it. |
 | `HOST_SESSION_SECRET` | host veto/lock | dev dummy only in fixture tests |
 
 `.env` is gitignored. Never read in unit tests.
