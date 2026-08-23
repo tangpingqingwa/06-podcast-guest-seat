@@ -177,6 +177,8 @@ if [[ -f package.json ]]; then
   grep -q 'Polar cannot charge' src/http/routes/pages.ts \
     || fail "empty episode must explain Polar cannot charge"
   grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
+  grep -q 'data-guest-skip' src/http/routes/pages.ts || fail "host desk missing guest-skip"
+  grep -q 'Guests skip this' src/http/routes/pages.ts || fail "host desk missing guests-skip copy"
   grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
   if grep -Eqi 'featured guest|play count|followers' src/http/routes/pages.ts src/views/skin.ts; then
     fail "product UI must not invent featured-guest art or play counts"
@@ -319,6 +321,8 @@ if [[ -f package.json ]]; then
     || fail "no-episode waiting-path test did not run"
   grep -q 'GET / with no episode shows a first-time host desk' "$test_log" \
     || fail "no-episode host-desk test did not run"
+  grep -q 'GET / with no episode tells first-time guests to skip the host desk' "$test_log" \
+    || fail "guest-skip host-desk test did not run"
   grep -q 'POST /host/open from the desk opens a guest-seat episode' "$test_log" \
     || fail "host-open desk test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
