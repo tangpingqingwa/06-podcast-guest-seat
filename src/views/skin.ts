@@ -326,6 +326,17 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .host-open[data-open-next] .empty-lead,
 .host-open[data-open-next] .host-open-note { justify-self: start; }
 .host-open[data-open-next] .empty-lead { color: #f3ead8; }
+.host-open.open-after-lock-first {
+  padding: 1.35rem 1.05rem 1.25rem;
+  border-width: 2px;
+}
+.host-open.open-after-lock-first .empty-lead {
+  font-size: 1.28rem;
+}
+.host-open.open-after-lock-first .open-next {
+  min-height: 3rem;
+  font-size: 1.05rem;
+}
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }
