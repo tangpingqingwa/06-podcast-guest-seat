@@ -220,6 +220,15 @@ function vetoNote(episode: Episode): string {
   return `Host veto is ${state}${guestDefault}.`;
 }
 
+function renderLockedClaim(episode: Episode): string {
+  const label = escapeHtml(episode.label);
+  return `<section class="claim" id="claim" data-claim-locked>
+  <h1 class="claim-title">${label} is locked</h1>
+  <p class="claim-note">Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty.</p>
+  <p class="form-hint">This episode is locked. Polar cannot charge. Prior bids do not carry. Unpaid checkout does not rank.</p>
+</section>`;
+}
+
 function renderClaim(input: {
   episode: Episode | undefined;
   canCharge: boolean;
@@ -228,28 +237,27 @@ function renderClaim(input: {
   nextSeat?: boolean;
 }): string {
   const episode = input.episode;
+  if (episode && !input.canCharge) {
+    return renderLockedClaim(episode);
+  }
   const seat = episode ? seatLabel(episode.seatKind) : "guest seat";
   const openEmpty = Boolean(episode && input.canCharge && input.emptyBoard);
   const nextSeat = Boolean(openEmpty && input.nextSeat && episode);
   const label = episode ? escapeHtml(episode.label) : "";
   const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
-    : !input.canCharge
-      ? "Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty."
-      : nextSeat
-        ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${vetoNote(episode)}`
-        : openEmpty
-          ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(episode)}`
-          : `Rank is the bid. ${vetoNote(episode)}`;
+    : nextSeat
+      ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${vetoNote(episode)}`
+      : openEmpty
+        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(episode)}`
+        : `Rank is the bid. ${vetoNote(episode)}`;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
-    : !input.canCharge
-      ? "This episode is locked. The next episode opens empty — prior bids do not carry."
-      : nextSeat
-        ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
-        : openEmpty
-          ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
-          : "Already on this episode? Enter the same site and raise. You pay only the difference.";
+    : nextSeat
+      ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
+      : openEmpty
+        ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
+        : "Already on this episode? Enter the same site and raise. You pay only the difference.";
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
@@ -403,7 +411,12 @@ export function renderBoardHtml(
     ? `${claim}
 ${ticket}
 ${rundown}`
-    : `${ticket}
+    : lockedEpisode
+      ? `${ticket}
+${claim}
+${desk}
+${rundown}`
+      : `${ticket}
 ${desk}
 ${claim}
 ${rundown}`;
