@@ -164,6 +164,24 @@ if [[ -f package.json ]]; then
     fail "hygiene/pages/go must not start Polar checkout"
   fi
 
+  echo "== product UI (studio rundown) source =="
+  [[ -f src/views/skin.ts ]] || fail "missing src/views/skin.ts"
+  grep -q 'Claim the' src/http/routes/pages.ts || fail "board missing claim chrome"
+  grep -q 'bid-stepper' src/http/routes/pages.ts || fail "board missing ± bid stepper"
+  grep -q 'bid-field' src/http/routes/pages.ts || fail "board missing dashed \$amount"
+  grep -q 'Outbid' src/http/routes/pages.ts || fail "board missing Outbid"
+  grep -q 'show-ticket' src/http/routes/pages.ts || fail "board missing show ticket"
+  grep -q 'guest-name' src/http/routes/pages.ts || fail "guest card missing name"
+  grep -q 'guest-line' src/http/routes/pages.ts || fail "guest card missing one-liner"
+  grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
+  grep -q 'Polar cannot charge' src/http/routes/pages.ts \
+    || fail "empty episode must explain Polar cannot charge"
+  grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
+  grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
+  if grep -Eqi 'featured guest|play count|followers' src/http/routes/pages.ts src/views/skin.ts; then
+    fail "product UI must not invent featured-guest art or play counts"
+  fi
+
   echo "== Polar checkout + fixture source =="
   for f in src/polar/port.ts src/polar/fixture.ts src/polar/live.ts \
     src/http/routes/checkout.ts tests/polar.test.ts; do
@@ -293,6 +311,12 @@ if [[ -f package.json ]]; then
     || fail "about page test did not run"
   grep -q 'GET /rules states min $5' "$test_log" \
     || fail "rules page test did not run"
+  grep -q 'GET / with no episode keeps the claim visible' "$test_log" \
+    || fail "no-episode claim chrome test did not run"
+  grep -q 'studio rundown is a guest card' "$test_log" \
+    || fail "studio guest-card test did not run"
+  grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
+    || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \
     || fail "SPEC 16 polar fixture test did not run"
   grep -q 'POLAR_LIVE unset in test' "$test_log" \

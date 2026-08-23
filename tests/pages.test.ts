@@ -122,6 +122,95 @@ test("GET /rules states min $5, older wins, veto default on for guest seat", asy
   assert.match(body, /Discord/);
 });
 
+test("GET / with no episode keeps the claim visible; Polar cannot charge yet", async () => {
+  const app = await buildApp();
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, /data-bid-step="-1"/);
+  assert.match(body, /data-bid-step="1"/);
+  assert.match(body, /name="bidUsd"/);
+  assert.match(body, /Outbid/);
+  assert.match(body, /Polar cannot charge yet/);
+  assert.match(body, /data-empty-board/);
+  assert.match(body, /No open episode yet/);
+  assert.match(body, /data-show-ticket/);
+  assert.match(body, /data-episode-open="false"/);
+  assert.match(body, /Show ticket/);
+  assert.match(body, /bid-field/);
+  assert.doesNotMatch(body, /featured guest/i);
+  assert.doesNotMatch(body, /play count/i);
+  assert.doesNotMatch(body, /followers/i);
+  assert.match(body, /disabled/);
+});
+
+test("studio rundown is a guest card, not a table: name, one-liner, site, bid, veto", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_studio",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: episode.id,
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada?utm_source=board",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+    clicks: 3,
+  });
+  insertListing(db, {
+    id: "lst_veto",
+    episodeId: episode.id,
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    clicks: 1,
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  const body = response.body;
+
+  assert.equal(response.statusCode, 200);
+  assert.match(body, /data-show-ticket/);
+  assert.match(body, /Episode 12/);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, />Outbid</);
+  assert.match(body, /action="\/checkout"/);
+  assert.match(body, /name="name"/);
+  assert.match(body, /name="siteUrl"/);
+  assert.match(body, /name="oneLiner"/);
+  assert.match(body, /data-rundown/);
+  assert.match(body, /Ada Lovelace/);
+  assert.match(body, /Notes on the analytical engine/);
+  assert.match(body, /example.com\/ada/);
+  assert.match(body, /\$12/);
+  assert.match(body, /3 clicks/);
+  assert.match(body, /Hard Sell Co/);
+  assert.match(body, /Vetoed: hard sell/);
+  assert.match(body, /data-listing-id="lst_veto"[^>]*data-vetoed="true"/);
+  assert.match(body, /hardsell.example/);
+  assert.doesNotMatch(body, /<table/);
+  assert.doesNotMatch(body, /<thead/);
+  assert.doesNotMatch(body, /featured guest/i);
+  assert.doesNotMatch(body, /play count/i);
+  assert.doesNotMatch(body, /utm_source/);
+});
+
 test("SPEC 15: public click /go/:id 302 + clicks increment", async () => {
   const db = memoryDb();
   const episode = createEpisode(db, {
@@ -162,4 +251,41 @@ test("SPEC 15: public click /go/:id 302 + clicks increment", async () => {
 
   const missing = await app.inject({ method: "GET", url: "/go/does-not-exist" });
   assert.equal(missing.statusCode, 404);
+});
+
+test("HTML Outbid form posts to /checkout and fixture checkout claims the seat", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_form",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+
+  const started = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_form&name=Ada%20Lovelace&siteUrl=https%3A%2F%2Fada.example%2Fnotes&oneLiner=Notes%20on%20the%20engine.&bidUsd=5",
+  });
+  assert.equal(started.statusCode, 303);
+  const location = String(started.headers.location ?? "");
+  assert.match(location, /\/checkout\/complete\?checkoutId=/);
+  assert.doesNotMatch(location, /polar/i);
+
+  const complete = await app.inject({ method: "GET", url: location });
+  assert.equal(complete.statusCode, 303);
+
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.match(board.body, /Ada Lovelace/);
+  assert.match(board.body, /ada.example\/notes/);
+  assert.match(board.body, /\$5/);
+  assert.match(board.body, /data-rank="1"/);
 });

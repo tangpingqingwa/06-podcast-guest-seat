@@ -25,6 +25,7 @@ import {
   type PolarEnv,
   type PolarPort,
 } from "../../polar/port.js";
+import { renderCheckoutErrorHtml } from "./pages.js";
 
 /** POST /checkout starts Polar (or fixture) checkout for a bid / raise. */
 export const CHECKOUT_PATH = "/checkout" as const;
@@ -282,31 +283,63 @@ export function extractCheckoutId(body: unknown): string | undefined {
   return data ? (readString(data.checkoutId) ?? readString(data.id)) : undefined;
 }
 
-function sendCheckoutError(reply: FastifyReply, err: unknown): FastifyReply {
-  if (err instanceof CheckoutError) {
-    return reply.code(err.statusCode).send({ error: err.code });
+function wantsHtml(request: { headers: Record<string, unknown> }): boolean {
+  const type = String(request.headers["content-type"] ?? "");
+  const accept = String(request.headers.accept ?? "");
+  return (
+    type.includes("application/x-www-form-urlencoded") ||
+    (/\btext\/html\b/.test(accept) && !/\bapplication\/json\b/.test(accept))
+  );
+}
+
+function sendCheckoutError(
+  reply: FastifyReply,
+  err: unknown,
+  asHtml = false,
+): FastifyReply {
+  const statusAndCode = (() => {
+    if (err instanceof CheckoutError) {
+      return { status: err.statusCode, code: err.code };
+    }
+    if (err instanceof RankError || err instanceof HygieneError) {
+      return { status: 400, code: err.code };
+    }
+    const message = err instanceof Error ? err.message : "";
+    if (message.startsWith("BLOCKED-SECRET") || message === "polar checkout failed closed") {
+      return { status: 503, code: "polar_unavailable" };
+    }
+    return null;
+  })();
+  if (!statusAndCode) {
+    throw err;
   }
-  if (err instanceof RankError) {
-    return reply.code(400).send({ error: err.code });
+  if (asHtml) {
+    return reply
+      .code(statusAndCode.status)
+      .type("text/html; charset=utf-8")
+      .send(renderCheckoutErrorHtml(statusAndCode.code));
   }
-  if (err instanceof HygieneError) {
-    return reply.code(400).send({ error: err.code });
-  }
-  const message = err instanceof Error ? err.message : "";
-  if (message.startsWith("BLOCKED-SECRET")) {
-    return reply.code(503).send({ error: "polar_unavailable" });
-  }
-  if (message === "polar checkout failed closed") {
-    return reply.code(503).send({ error: "polar_unavailable" });
-  }
-  throw err;
+  return reply.code(statusAndCode.status).send({ error: statusAndCode.code });
 }
 
 export const checkoutRoutes: FastifyPluginAsync = async (app) => {
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      const raw = typeof body === "string" ? body : body.toString("utf8");
+      done(null, Object.fromEntries(new URLSearchParams(raw)));
+    },
+  );
+
   app.post(CHECKOUT_PATH, async (request, reply) => {
     const body = (isRecord(request.body) ? request.body : {}) as CheckoutBody;
+    const html = wantsHtml(request);
     try {
       const started = await startCheckout(app.db, app.polar, body);
+      if (html) {
+        return reply.redirect(started.url, 303);
+      }
       return {
         checkoutId: started.checkoutId,
         url: started.url,
@@ -314,7 +347,7 @@ export const checkoutRoutes: FastifyPluginAsync = async (app) => {
         chargeUsd: started.chargeUsd,
       };
     } catch (err) {
-      return sendCheckoutError(reply, err);
+      return sendCheckoutError(reply, err, html);
     }
   });
 

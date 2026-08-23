@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getCurrentEpisode, getEpisode, type Episode } from "../../episodes.js";
 import { listListingsForEpisode, type Listing } from "../../listings.js";
-import { rankListings, type RankedListing } from "../../rank.js";
+import { MIN_BID_USD, rankListings, type RankedListing } from "../../rank.js";
+import { BOARD_CSS } from "../../views/skin.js";
 
 export const BOARD_PATH = "/" as const;
 export const EPISODE_BOARD_PATH = "/e/:episodeId" as const;
@@ -13,6 +14,7 @@ type BoardRow = {
   rank: number | null;
   name: string;
   oneLiner: string;
+  siteUrl: string;
   bidUsd: number;
   firstBidAt: string;
   clicks: number;
@@ -44,6 +46,16 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return `${Math.round(deltaSec / 86400)} days ago`;
 }
 
+export function displaySite(siteUrl: string): string {
+  try {
+    const parsed = new URL(siteUrl);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return `${parsed.host}${path === "/" ? "" : path}`;
+  } catch {
+    return siteUrl;
+  }
+}
+
 export function boardRows(listings: readonly Listing[]): BoardRow[] {
   const ranked = rankListings(listings);
   const rankedIds = new Set(ranked.map((row) => row.id));
@@ -52,6 +64,7 @@ export function boardRows(listings: readonly Listing[]): BoardRow[] {
     rank: row.rank,
     name: row.name,
     oneLiner: row.oneLiner,
+    siteUrl: row.siteUrl,
     bidUsd: row.bidUsd,
     firstBidAt: row.firstBidAt,
     clicks: row.clicks,
@@ -71,6 +84,7 @@ export function boardRows(listings: readonly Listing[]): BoardRow[] {
       rank: null,
       name: row.name,
       oneLiner: row.oneLiner,
+      siteUrl: row.siteUrl,
       bidUsd: row.bidUsd,
       firstBidAt: row.firstBidAt,
       clicks: row.clicks,
@@ -96,24 +110,14 @@ function renderLayout(input: {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(input.title)}</title>
-  <style>
-    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, sans-serif; }
-    body { margin: 0; color: #111; background: #fafafa; line-height: 1.5; }
-    header, main, footer { max-width: 44rem; margin: 0 auto; padding: 1rem 1.25rem; }
-    header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
-    nav { display: flex; gap: 0.85rem; }
-    a { color: #0b57d0; }
-    h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
-    .muted { color: #555; }
-    .empty { padding: 1rem 0; }
-    footer { color: #555; font-size: 0.9rem; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>${BOARD_CSS}</style>
 </head>
 <body>
-  <header>
-    <a href="/">Podcast Guest Seat</a>
+  <header class="site-header">
+    <a class="brand" href="/"><span class="on-air">ON AIR</span> Guest Seat</a>
     <nav aria-label="Main">
       ${navLink("/", "Board", input.path)}
       ${navLink("/about", "About", input.path)}
@@ -135,61 +139,160 @@ function seatLabel(kind: Episode["seatKind"]): string {
   return kind === "guest_seat" ? "guest seat" : "60-second open";
 }
 
+function defaultClaimBidUsd(rows: readonly BoardRow[]): number {
+  const top = rows.find((row) => row.rank === 1)?.bidUsd ?? 0;
+  return top > 0 ? top + 1 : MIN_BID_USD;
+}
+
+function renderShowTicket(episode: Episode | undefined): string {
+  if (!episode) {
+    return `<aside class="show-ticket" data-show-ticket data-episode-open="false">
+  <div class="ticket-main">
+    <p class="ticket-kicker">Show ticket</p>
+    <p class="ticket-label">No episode open</p>
+    <p class="ticket-seat">guest seat</p>
+    <p class="ticket-veto">The host has not opened a board. Polar cannot charge yet.</p>
+  </div>
+  <div class="ticket-stub">
+    <p class="stub-state">WAIT</p>
+    <p class="stub-admit">ADMIT ONE</p>
+  </div>
+</aside>`;
+  }
+  const open = episode.lockedAt === null;
+  const veto =
+    episode.vetoEnabled
+      ? episode.seatKind === "guest_seat"
+        ? "Host veto is on (default on for guest seat)."
+        : "Host veto is on."
+      : "Host veto is off.";
+  return `<aside class="show-ticket" data-show-ticket data-episode-open="${open ? "true" : "false"}">
+  <div class="ticket-main">
+    <p class="ticket-kicker">Show ticket</p>
+    <p class="ticket-label">${escapeHtml(episode.label)}</p>
+    <p class="ticket-seat">${escapeHtml(seatLabel(episode.seatKind))}</p>
+    <p class="ticket-veto">${veto}</p>
+  </div>
+  <div class="ticket-stub">
+    <p class="stub-state">${open ? "OPEN" : "LOCK"}</p>
+    <p class="stub-admit">ADMIT ONE</p>
+  </div>
+</aside>`;
+}
+
+function renderGuestCard(row: BoardRow, now: Date): string {
+  const cue = row.vetoed ? "VETO" : row.rank === null ? "—" : `#${row.rank}`;
+  const kind = row.vetoed ? "CUT" : row.rank === 1 ? "SEAT" : "HOLD";
+  const klass = row.vetoed ? " guest vetoed" : row.rank === 1 ? " guest booked" : " guest";
+  const veto = row.vetoed
+    ? `<p class="guest-veto">Vetoed${row.vetoReason ? `: ${escapeHtml(row.vetoReason)}` : ""}</p>`
+    : "";
+  const go = `/go/${escapeHtml(row.id)}`;
+  return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}">
+  <div class="cue">
+    <span class="cue-num">${cue}</span>
+    <span class="cue-kind">${kind}</span>
+  </div>
+  <div class="person">
+    <h2 class="guest-name"><a href="${go}">${escapeHtml(row.name)}</a></h2>
+    <p class="guest-line">${escapeHtml(row.oneLiner)}</p>
+    <p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>
+    ${veto}
+  </div>
+  <div class="tally">
+    <p class="bid">$${row.bidUsd}</p>
+    <p class="clicks">${row.clicks} clicks</p>
+    <p class="when"><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></p>
+  </div>
+</article>`;
+}
+
+function renderClaim(input: {
+  episode: Episode | undefined;
+  canCharge: boolean;
+  defaultBid: number;
+}): string {
+  const seat = input.episode ? seatLabel(input.episode.seatKind) : "guest seat";
+  const note = !input.episode
+    ? "Rank is the bid. No episode is open. Polar cannot charge yet."
+    : !input.canCharge
+      ? "Rank is the bid. This episode is locked. Polar cannot charge."
+      : `Rank is the bid. Host veto is ${input.episode.vetoEnabled ? "on" : "off"}${
+          input.episode.seatKind === "guest_seat" ? " (default on for guest seat)" : ""
+        }.`;
+  const disabled = input.canCharge ? "" : " disabled";
+  return `<section class="claim" id="claim">
+  <h1 class="claim-title">
+    <span>Claim the ${escapeHtml(seat)} for</span>
+    <span class="bid-stepper">
+      <button type="button" class="step" data-bid-step="-1" aria-label="Decrease bid by one dollar"${disabled}>−</button>
+      <label class="bid-field">
+        <span class="sr-only">Amount in dollars</span>
+        $<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}"${disabled}/>
+      </label>
+      <button type="button" class="step" data-bid-step="1" aria-label="Increase bid by one dollar"${disabled}>+</button>
+    </span>
+  </h1>
+  <p class="claim-note">${note}</p>
+  <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
+    ${input.episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(input.episode.id)}"/>` : ""}
+    <div class="fields">
+      <input name="name" required maxlength="80" placeholder="Name or company"${disabled}/>
+      <input name="siteUrl" type="url" required placeholder="https://your-site"${disabled}/>
+      <input class="span-2" name="oneLiner" required maxlength="140" placeholder="One-liner for the host"${disabled}/>
+    </div>
+    <button type="submit" class="outbid"${disabled}>Outbid</button>
+  </form>
+  <p class="form-hint">Already on this episode? Enter the same site and raise. You pay only the difference.</p>
+</section>`;
+}
+
 export function renderBoardHtml(
   episode: Episode | undefined,
   listings: readonly Listing[],
   now: Date = new Date(),
   path: string = "/",
 ): string {
-  if (!episode) {
-    return renderLayout({
-      title: "Podcast Guest Seat",
-      path,
-      body: `<h1>Podcast Guest Seat</h1>
-<p>Bid dollars to sit in the next episode. Rank is the bid.</p>
-<p class="empty" data-empty-board>No open episode yet.</p>`,
-    });
-  }
-
-  const rows = boardRows(listings);
-  const table =
-    rows.length === 0
-      ? `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
-      : `<table>
-  <thead>
-    <tr><th>Rank</th><th>Name</th><th>Bid</th><th>When</th><th>Clicks</th></tr>
-  </thead>
-  <tbody>
-    ${rows
-      .map((row) => {
-        const rank = row.vetoed ? "vetoed" : row.rank === null ? "—" : `#${row.rank}`;
-        const veto = row.vetoed
-          ? `<p class="muted">Vetoed${row.vetoReason ? `: ${escapeHtml(row.vetoReason)}` : ""}</p>`
-          : "";
-        return `<tr data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}">
-      <td>${rank}</td>
-      <td>
-        <a href="/go/${escapeHtml(row.id)}">${escapeHtml(row.name)}</a>
-        <p class="muted">${escapeHtml(row.oneLiner)}</p>
-        ${veto}
-      </td>
-      <td>$${row.bidUsd}</td>
-      <td><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></td>
-      <td>${row.clicks} clicks</td>
-    </tr>`;
-      })
-      .join("\n    ")}
-  </tbody>
-</table>`;
+  const canCharge = Boolean(episode && episode.lockedAt === null);
+  const rows = episode ? boardRows(listings) : [];
+  const rundown =
+    !episode
+      ? `<p class="empty" data-empty-board>No open episode yet.</p>`
+      : rows.length === 0
+        ? `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
+        : `<div class="rundown" data-rundown>
+    <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
+    ${rows.map((row) => renderGuestCard(row, now)).join("\n    ")}
+  </div>`;
 
   return renderLayout({
-    title: `${episode.label} · Podcast Guest Seat`,
+    title: episode ? `${episode.label} · Podcast Guest Seat` : "Podcast Guest Seat",
     path,
-    body: `<h1>${escapeHtml(episode.label)}</h1>
-<p>This episode’s ${escapeHtml(seatLabel(episode.seatKind))}. Rank is the bid. Host veto is ${
-      episode.vetoEnabled ? "on" : "off"
-    }${episode.seatKind === "guest_seat" ? " (default on for guest seat)" : ""}.</p>
-${table}`,
+    body: `<div class="studio">
+${renderShowTicket(episode)}
+${renderClaim({
+  episode,
+  canCharge,
+  defaultBid: defaultClaimBidUsd(rows),
+})}
+${rundown}
+</div>
+<script>
+  (function () {
+    var min = ${MIN_BID_USD};
+    var input = document.getElementById("bid");
+    if (!input || input.disabled) return;
+    function parseBid(raw) {
+      var n = parseInt(String(raw).replace(/[^0-9]/g, ""), 10);
+      return Number.isFinite(n) ? Math.max(min, n) : min;
+    }
+    document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        input.value = String(Math.max(min, parseBid(input.value) + Number(btn.getAttribute("data-bid-step"))));
+      });
+    });
+  })();
+</script>`,
   });
 }
 
@@ -197,11 +300,13 @@ export function renderAboutHtml(): string {
   return renderLayout({
     title: "About · Podcast Guest Seat",
     path: "/about",
-    body: `<h1>About</h1>
+    body: `<article class="doc">
+<h1>About</h1>
 <p>This is a public auction for the next episode’s <strong>guest seat</strong> or a <strong>60-second open</strong>. People and companies bid whole US dollars. Rank is the bid — nothing else.</p>
 <p>Cadence is <strong>per episode</strong>. When the host locks episode N, the highest remaining eligible bid is booked. Episode N+1 opens empty. Prior bids do not carry.</p>
 <p>The host can still say no. <strong>Veto defaults on for guest seat</strong> and off for a 60-second open. A vetoed row stays visible with a public reason.</p>
-<p>Clicks go through this board so the click count is public. Tracking query strings are stripped. Chat invites and adult platforms are rejected.</p>`,
+<p>Clicks go through this board so the click count is public. Tracking query strings are stripped. Chat invites and adult platforms are rejected.</p>
+</article>`,
   });
 }
 
@@ -209,7 +314,8 @@ export function renderRulesHtml(): string {
   return renderLayout({
     title: "Rules · Podcast Guest Seat",
     path: "/rules",
-    body: `<h1>Rules</h1>
+    body: `<article class="doc">
+<h1>Rules</h1>
 <p>A bidder can predict rank from this page alone.</p>
 <table>
   <tbody>
@@ -228,7 +334,20 @@ export function renderRulesHtml(): string {
 </table>
 <h2>Host veto</h2>
 <p>Veto is a documented flag, <strong>default on for guest seat</strong> (<code>vetoEnabled: true</code> when <code>seatKind === "guest_seat"</code>). Default off for a 60-second open.</p>
-<p>A show may flip the flag before the first paid bid. After the first paid bid, the flag is frozen. Host may veto any listed bidder with a public reason. Money already paid is not refunded here. The vetoed row stays visible. Rank recomputes among remaining paid listings. Older still wins ties. When the flag is off, the highest paid bid is booked at lock.</p>`,
+<p>A show may flip the flag before the first paid bid. After the first paid bid, the flag is frozen. Host may veto any listed bidder with a public reason. Money already paid is not refunded here. The vetoed row stays visible. Rank recomputes among remaining paid listings. Older still wins ties. When the flag is off, the highest paid bid is booked at lock.</p>
+</article>`,
+  });
+}
+
+export function renderCheckoutErrorHtml(code: string): string {
+  return renderLayout({
+    title: "Checkout · Podcast Guest Seat",
+    path: "/",
+    body: `<article class="doc">
+<h1>Checkout did not start</h1>
+<p class="empty">${escapeHtml(code)}. Polar did not charge.</p>
+<p><a href="/">Back to the rundown</a></p>
+</article>`,
   });
 }
 
