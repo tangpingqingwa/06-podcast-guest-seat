@@ -191,6 +191,8 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
   const kind = row.vetoed ? "CUT" : row.rank === 1 ? "SEAT" : "HOLD";
   const klass = row.vetoed ? " guest vetoed" : row.rank === 1 ? " guest booked" : " guest";
   const prize = live && row.rank !== null && !row.vetoed;
+  const laterFact = prize ? " later-fact" : "";
+  const laterMark = prize ? " data-later-fact" : "";
   const veto = row.vetoed
     ? `<p class="guest-veto">Vetoed${row.vetoReason ? `: ${escapeHtml(row.vetoReason)}` : ""}</p>`
     : "";
@@ -207,7 +209,7 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
     ${veto}
   </div>
   <div class="tally">
-    <p class="bid">$${row.bidUsd}</p>
+    <p class="bid${laterFact}"${laterMark}>$${row.bidUsd}</p>
     <p class="clicks">${row.clicks} clicks</p>
     <p class="when"><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></p>
   </div>
