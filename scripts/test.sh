@@ -174,6 +174,8 @@ if [[ -f package.json ]]; then
   grep -q 'guest-name' src/http/routes/pages.ts || fail "guest card missing name"
   grep -q 'guest-line' src/http/routes/pages.ts || fail "guest card missing one-liner"
   grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
+  grep -q 'data-guest-prize' src/http/routes/pages.ts || fail "live ranked seat missing guest prize mark"
+  grep -q 'data-guest-prize' src/views/skin.ts || fail "live ranked seat missing prize-before-price CSS"
   grep -q 'Polar cannot charge' src/http/routes/pages.ts \
     || fail "empty episode must explain Polar cannot charge"
   grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
@@ -394,6 +396,8 @@ if [[ -f package.json ]]; then
     || fail "open-seat first-guest test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
+  grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
+    || fail "live prize-before-price test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \

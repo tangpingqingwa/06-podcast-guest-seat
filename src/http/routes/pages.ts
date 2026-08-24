@@ -186,15 +186,16 @@ function renderShowTicket(episode: Episode | undefined): string {
 </aside>`;
 }
 
-function renderGuestCard(row: BoardRow, now: Date): string {
+function renderGuestCard(row: BoardRow, now: Date, live = false): string {
   const cue = row.vetoed ? "VETO" : row.rank === null ? "—" : `#${row.rank}`;
   const kind = row.vetoed ? "CUT" : row.rank === 1 ? "SEAT" : "HOLD";
   const klass = row.vetoed ? " guest vetoed" : row.rank === 1 ? " guest booked" : " guest";
+  const prize = live && row.rank !== null && !row.vetoed;
   const veto = row.vetoed
     ? `<p class="guest-veto">Vetoed${row.vetoReason ? `: ${escapeHtml(row.vetoReason)}` : ""}</p>`
     : "";
   const go = `/go/${escapeHtml(row.id)}`;
-  return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}">
+  return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}"${prize ? " data-guest-prize" : ""}>
   <div class="cue">
     <span class="cue-num">${cue}</span>
     <span class="cue-kind">${kind}</span>
@@ -395,7 +396,7 @@ export function renderBoardHtml(
           : `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
         : `<div class="rundown" data-rundown>
     <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
-    ${rows.map((row) => renderGuestCard(row, now)).join("\n    ")}
+    ${rows.map((row) => renderGuestCard(row, now, canCharge)).join("\n    ")}
   </div>`;
 
   const lockedEpisode = episode && !canCharge ? episode : undefined;

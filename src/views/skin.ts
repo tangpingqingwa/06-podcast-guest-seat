@@ -267,6 +267,11 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .guest-name {
   margin: 0; font-size: 1.12rem; font-weight: 700; letter-spacing: -0.02em;
 }
+.guest[data-guest-prize] .guest-name {
+  font-size: clamp(1.5rem, 3.8vw, 1.95rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
 .guest-name a:hover { text-decoration: underline; }
 .guest-line { margin: 0.2rem 0 0; color: #d9ccb4; }
 .guest-site { margin: 0.3rem 0 0; font-family: var(--mono); font-size: 0.82rem; color: var(--lamp); }
@@ -274,7 +279,9 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .guest-veto { margin: 0.35rem 0 0; color: #e7b1a6; font-size: 0.88rem; }
 .tally { text-align: right; font-family: var(--mono); }
 .bid { margin: 0; color: var(--lamp); font-weight: 700; font-size: 1.05rem; }
+.guest[data-guest-prize] .bid { font-size: 0.88rem; font-weight: 600; }
 .clicks, .when { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.78rem; }
+.guest[data-guest-prize] .clicks { font-size: 0.72rem; }
 .empty {
   margin: 0; padding: 1.15rem 1rem; text-align: center; color: var(--muted);
   border: 1px dashed var(--line); background: rgb(0 0 0 / 0.15);
