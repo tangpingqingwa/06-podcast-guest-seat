@@ -196,6 +196,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-foot],
 .studio.studio-open-empty[data-empty-honest] [data-later-facts],
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
+.studio.studio-open-empty[data-empty-honest] [data-paid-at],
 .studio.studio-open-empty[data-empty-honest] [data-claim-locked],
 .studio.studio-open-empty[data-empty-honest] [data-lock-certain],
 .studio.studio-open-empty[data-empty-honest] [data-lock-409],
@@ -211,6 +212,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-foot],
 .studio.studio-open-empty [data-later-facts],
 .studio.studio-open-empty [data-later-fact],
+.studio.studio-open-empty [data-paid-at],
 .studio.studio-open-empty .later-fact,
 .studio.studio-open-empty .later-facts,
 .studio.studio-open-empty .guest.later-seat,
@@ -519,32 +521,32 @@ footer { color: var(--muted); font-size: 0.85rem; }
 .doc th { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; font-weight: 500; }
 `;
 
-/* Occupied live only: #1 guest is the first click; later seats stay quieter.
-   Host Lock is a later write after the rundown. Empty open must not inherit this. */
+/* Occupied live only: Polar-paid #1 guest is the first click; later seats stay quieter.
+   Host Lock is a later write after the rundown. Empty open / unpaid checkout must not inherit this. */
 export const OCCUPIED_CSS = /* css */ `
-.studio.studio-open-occupied .guest[data-guest-prize] {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] {
   grid-template-columns: 3.4rem 1fr;
   grid-template-areas:
     "cue person";
   gap: 0.75rem 0.9rem;
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .cue { grid-area: cue; }
-.studio.studio-open-occupied .guest[data-guest-prize] .person { grid-area: person; }
-.studio.studio-open-occupied .guest[data-guest-prize] .guest-name {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .cue { grid-area: cue; }
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .person { grid-area: person; }
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name {
   font-size: clamp(1.5rem, 3.8vw, 1.95rem);
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .guest-name a[data-first-click="guest"] {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name a[data-first-click="guest"] {
   text-decoration: underline;
   text-underline-offset: 0.14em;
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .guest-site {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-site {
   margin-top: 0.35rem;
   font-size: 0.82rem;
   color: var(--lamp);
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -552,7 +554,7 @@ export const OCCUPIED_CSS = /* css */ `
   margin: 0.55rem 0 0;
   font-family: var(--mono);
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] {
   grid-template-columns: 2.4rem 1fr;
   grid-template-areas:
     "cue person"
@@ -563,9 +565,9 @@ export const OCCUPIED_CSS = /* css */ `
   border-left-color: var(--line);
   background: #1a1612;
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .cue { grid-area: cue; }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .person { grid-area: person; }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .cue { grid-area: cue; }
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .person { grid-area: person; }
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot] {
   grid-area: foot;
   display: flex;
   flex-wrap: wrap;
@@ -578,33 +580,33 @@ export const OCCUPIED_CSS = /* css */ `
   font-family: var(--mono);
   font-size: 0.72rem;
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .cue-num {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .cue-num {
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--muted);
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .guest-name.later-name {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .guest-name.later-name {
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0;
   color: #d9ccb4;
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] a.later-go[data-later-go],
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .bid,
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .clicks,
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .when {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot] a.later-go[data-later-go],
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot] .bid,
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot] .clicks,
+.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot] .when {
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--muted);
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] .bid { font-size: 0.88rem; font-weight: 600; }
-.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] .bid.later-fact[data-later-fact] {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] .bid { font-size: 0.88rem; font-weight: 600; }
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] .bid.later-fact[data-later-fact] {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 500;
 }
-.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] .clicks,
-.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] .when {
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] .clicks,
+.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] .when {
   font-size: 0.72rem;
   color: var(--muted);
 }

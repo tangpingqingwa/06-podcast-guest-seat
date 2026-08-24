@@ -135,6 +135,9 @@ if [[ -f package.json ]]; then
   grep -q 'full_bid_required' src/rank.ts \
     || fail "src/rank.ts missing full-bid reject for other bidders"
   grep -q 'rankListings' src/rank.ts || fail "src/rank.ts missing rankListings"
+  grep -q 'isPaidListing' src/rank.ts || fail "src/rank.ts missing isPaidListing Polar paid gate"
+  grep -q 'paidListings' src/rank.ts || fail "src/rank.ts missing paidListings Polar occupancy"
+  grep -q 'paidListings(listings)' src/rank.ts || fail "rankListings must rank Polar-paid rows only"
   if grep -E 'PolarPort|/about|/rules|/go/' src/rank.ts >/dev/null; then
     fail "rank engine must not add Polar or hygiene pages"
   fi
@@ -196,7 +199,9 @@ if [[ -f package.json ]]; then
   grep -q 'guest-line' src/http/routes/pages.ts || fail "guest card missing one-liner"
   grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
   grep -q 'data-guest-prize' src/http/routes/pages.ts || fail "live ranked seat missing guest prize mark"
+  grep -q 'data-paid-at' src/http/routes/pages.ts || fail "live ranked seat missing Polar paid-at stamp"
   grep -q 'data-guest-prize' src/views/skin.ts || fail "live ranked seat missing prize-before-price CSS"
+  grep -q 'data-paid-at' src/views/skin.ts || fail "occupied #1 prize CSS missing Polar paid-at"
   grep -q 'data-first-click="guest"' src/http/routes/pages.ts || fail "occupied #1 guest missing first-click mark"
   grep -q 'data-first-click="guest"' src/views/skin.ts || fail "occupied #1 guest missing first-click CSS"
   grep -q 'data-later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat mark"
@@ -210,20 +215,20 @@ if [[ -f package.json ]]; then
   grep -q 'later-foot\[data-later-foot\]' src/views/skin.ts || fail "later-foot CSS must keep /go and \$bid quieter than #1 guest"
   grep -q 'export const STUDIO_CSS' src/views/skin.ts || fail "empty-open studio CSS missing STUDIO_CSS"
   grep -q 'export const OCCUPIED_CSS' src/views/skin.ts || fail "occupied guest-one-first CSS missing OCCUPIED_CSS"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize] .guest-name' src/views/skin.ts \
-    || fail "occupied #1 guest prize CSS must be scoped to studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize] .guest-name a[data-first-click="guest"]' src/views/skin.ts \
-    || fail "occupied #1 guest first-click CSS must be scoped to studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name' src/views/skin.ts \
+    || fail "occupied #1 guest prize CSS must be scoped to Polar-paid studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name a[data-first-click="guest"]' src/views/skin.ts \
+    || fail "occupied #1 guest first-click CSS must be scoped to Polar-paid studio-open-occupied"
   grep -q 'class="later-facts"' src/http/routes/pages.ts \
     || fail "occupied #1 guest missing later-facts composition"
   grep -q 'data-later-facts' src/http/routes/pages.ts \
     || fail "occupied #1 guest missing later-facts stamp"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts]' src/views/skin.ts \
-    || fail "occupied #1 later-facts CSS must be scoped to studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat]' src/views/skin.ts \
-    || fail "later-seat CSS must be scoped to studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot]' src/views/skin.ts \
-    || fail "later-foot CSS must be scoped to studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts]' src/views/skin.ts \
+    || fail "occupied #1 later-facts CSS must be scoped to Polar-paid studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at]' src/views/skin.ts \
+    || fail "later-seat CSS must be scoped to Polar-paid studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot]' src/views/skin.ts \
+    || fail "later-foot CSS must be scoped to Polar-paid studio-open-occupied"
   if grep -E '^\.guest\[data-guest-prize\]' src/views/skin.ts >/dev/null; then
     fail "guest-prize CSS must not leak globally onto empty open"
   fi
@@ -243,6 +248,16 @@ if [[ -f package.json ]]; then
   if grep -nE 'data-lock-after-rundown|data-guest-before-lock|lock-after-guest|data-lock-after-guest' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; compose occupied Lock after the rundown"
+  fi
+  grep -q 'paidListings' src/http/routes/pages.ts \
+    || fail "rundown occupancy must compose Polar-paid rows only"
+  grep -q 'isPaidListing' src/http/routes/pages.ts \
+    || fail "guest card must refuse unpaid Polar checkout as #1"
+  grep -q 'isPaidListing' src/http/routes/go.ts \
+    || fail "/go must 404 unpaid Polar checkout"
+  if grep -nE 'data-unpaid-off|data-paid-only-rundown|data-unpaid-off-board|lock-after-open-six' \
+    src/http/routes/pages.ts src/views/skin.ts src/http/routes/go.ts >/dev/null; then
+    fail "unpaid-off occupancy must not add another named hop"
   fi
   grep -F -q $'${rundown}\n${desk}' src/http/routes/pages.ts \
     || fail "occupied live host Lock must render after the rundown"
@@ -300,6 +315,8 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked later-foot chrome"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-facts]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-facts chrome"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-paid-at]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked Polar paid-at chrome"
   grep -F -q '.studio.studio-open-empty [data-guest-prize]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked guest-prize without stamp-only"
   grep -F -q '.studio.studio-open-empty [data-first-click="guest"]' src/views/skin.ts \
@@ -312,6 +329,8 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked later-foot without stamp-only"
   grep -F -q '.studio.studio-open-empty [data-later-facts]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-facts without stamp-only"
+  grep -F -q '.studio.studio-open-empty [data-paid-at]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked Polar paid-at without stamp-only"
   grep -F -q '.studio.studio-open-empty .later-fact' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-fact class"
   grep -F -q '.studio.studio-open-empty .later-facts' src/views/skin.ts \
@@ -546,6 +565,10 @@ if [[ -f package.json ]]; then
     || fail "occupied live prize-not-foot test did not run"
   grep -q 'GET / on occupied live keeps one first click' "$test_log" \
     || fail "occupied live host Lock after rundown test did not run"
+  grep -q 'unpaid stays off the rundown' "$test_log" \
+    || fail "unpaid stays off the rundown leftover test did not run"
+  grep -q 'No #1 guest until Polar reports paid' "$test_log" \
+    || fail "unpaid-off Polar paid leftover test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \
