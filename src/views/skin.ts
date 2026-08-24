@@ -398,6 +398,17 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   min-height: 4.1rem;
   font-size: 1.38rem;
 }
+.host-open.open-after-lock-five {
+  padding: 3.15rem 1.8rem 3.05rem;
+  border-width: 9px;
+}
+.host-open.open-after-lock-five .empty-lead {
+  font-size: 2rem;
+}
+.host-open.open-after-lock-five .open-next {
+  min-height: 4.55rem;
+  font-size: 1.52rem;
+}
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }

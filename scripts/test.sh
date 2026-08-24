@@ -192,6 +192,8 @@ if [[ -f package.json ]]; then
   grep -q 'open-after-lock-three' src/views/skin.ts || fail "open-after-lock-three desk missing hop-local CSS"
   grep -q 'data-open-after-lock-four' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-four"
   grep -q 'open-after-lock-four' src/views/skin.ts || fail "open-after-lock-four desk missing hop-local CSS"
+  grep -q 'data-open-after-lock-five' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-five"
+  grep -q 'open-after-lock-five' src/views/skin.ts || fail "open-after-lock-five desk missing hop-local CSS"
   grep -q 'data-lock-after-open' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open"
   grep -q 'data-lock-after-open-first' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-first"
   grep -q 'lock-after-open-first' src/views/skin.ts || fail "lock-after-open-first claim missing hop-local CSS"
@@ -380,6 +382,8 @@ if [[ -f package.json ]]; then
     || fail "open-after-lock-four host-desk test did not run"
   grep -q 'GET / after lock concentrates the locked episode after Open N+1 is re-concentrated again' "$test_log" \
     || fail "lock-after-open-four guest first-read test did not run"
+  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is re-concentrated again, once more' "$test_log" \
+    || fail "open-after-lock-five host-desk test did not run"
   grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
     || fail "N+1 first-guest bid test did not run"
   grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
