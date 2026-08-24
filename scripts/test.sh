@@ -236,10 +236,14 @@ if [[ -f package.json ]]; then
   if grep -E '^\.later-facts' src/views/skin.ts >/dev/null; then
     fail "later-facts CSS must not leak globally onto empty open"
   fi
-  if grep -nE 'data-prize-not-foot|data-later-foot-first|later-foot-after' \
+  if grep -nE 'data-prize-not-foot|data-later-foot-first|later-foot-after|data-guest-before-lock|data-lock-after-rundown|data-lock-after-guest|lock-after-open-six' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; compose prize later-facts vs later-foot"
+    fail "do not stamp another named hop; compose prize later-facts vs later-foot; Lock stays after the rundown"
   fi
+  grep -F -q '.studio.studio-open-occupied .host-lock[data-host-lock]' src/views/skin.ts \
+    || fail "occupied host Lock desk must be quieter after the rundown"
+  grep -F -q '.studio.studio-open-occupied .host-lock[data-host-lock] .host-open-form .lock-episode' src/views/skin.ts \
+    || fail "occupied Lock Episode control must stay quieter than #1 guest"
   grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
   grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
   grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
@@ -538,6 +542,8 @@ if [[ -f package.json ]]; then
     || fail "occupied live later-seat quiet test did not run"
   grep -q 'GET / on occupied live keeps #1 guest prize chrome' "$test_log" \
     || fail "occupied live prize-not-foot test did not run"
+  grep -q 'GET / on occupied live keeps one first click' "$test_log" \
+    || fail "occupied live guest-before-lock test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \

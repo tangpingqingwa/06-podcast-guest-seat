@@ -493,16 +493,21 @@ export function renderBoardHtml(
     emptyBoard: rows.length === 0,
   });
   const occupiedLive = Boolean(canCharge && rows.length > 0);
-  const studio = nextSeat
-    ? `${claim}
+  const studio = occupiedLive
+    ? `${ticket}
+${claim}
+${rundown}
+${desk}`
+    : nextSeat
+      ? `${claim}
 ${ticket}
 ${rundown}`
-    : lockedEpisode
-      ? `${claim}
+      : lockedEpisode
+        ? `${claim}
 ${ticket}
 ${desk}
 ${rundown}`
-      : `${ticket}
+        : `${ticket}
 ${desk}
 ${claim}
 ${rundown}`;

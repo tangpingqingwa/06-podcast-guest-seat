@@ -519,7 +519,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
 .doc th { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; font-weight: 500; }
 `;
 
-/* Occupied live only: #1 guest is the first click; later seats stay quieter. Empty open must not inherit this. */
+/* Occupied live only: #1 guest is the first click; later seats stay quieter; host Lock is a later desk. Empty open must not inherit this. */
 export const OCCUPIED_CSS = /* css */ `
 .studio.studio-open-occupied .guest[data-guest-prize] {
   grid-template-columns: 3.4rem 1fr;
@@ -606,6 +606,35 @@ export const OCCUPIED_CSS = /* css */ `
 .studio.studio-open-occupied .guest[data-guest-prize] .later-facts[data-later-facts] .when {
   font-size: 0.72rem;
   color: var(--muted);
+}
+.studio.studio-open-occupied .host-lock[data-host-lock] {
+  justify-items: start;
+  text-align: left;
+  margin-top: 0.15rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--line);
+  background: rgb(0 0 0 / 0.12);
+  box-shadow: none;
+}
+.studio.studio-open-occupied .host-lock[data-host-lock] .empty-kicker,
+.studio.studio-open-occupied .host-lock[data-host-lock] .empty-lead,
+.studio.studio-open-occupied .host-lock[data-host-lock] .host-open-note {
+  justify-self: start;
+  color: var(--muted);
+}
+.studio.studio-open-occupied .host-lock[data-host-lock] .empty-lead {
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.studio.studio-open-occupied .host-lock[data-host-lock] .host-open-form .lock-episode {
+  height: 2.2rem;
+  border: 1px solid var(--line);
+  background: var(--studio-2);
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 `;
 
