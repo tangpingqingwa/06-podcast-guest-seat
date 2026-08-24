@@ -502,7 +502,12 @@ ${rundown}`
 ${ticket}
 ${desk}
 ${rundown}`
-      : `${ticket}
+      : occupiedLive
+        ? `${ticket}
+${claim}
+${rundown}
+${desk}`
+        : `${ticket}
 ${desk}
 ${claim}
 ${rundown}`;

@@ -240,6 +240,12 @@ if [[ -f package.json ]]; then
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; compose prize later-facts vs later-foot"
   fi
+  if grep -nE 'data-lock-after-rundown|data-guest-before-lock|lock-after-guest|data-lock-after-guest' \
+    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
+    fail "do not stamp another named hop; compose occupied Lock after the rundown"
+  fi
+  grep -F -q $'${rundown}\n${desk}' src/http/routes/pages.ts \
+    || fail "occupied live host Lock must render after the rundown"
   grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
   grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
   grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
@@ -538,6 +544,8 @@ if [[ -f package.json ]]; then
     || fail "occupied live later-seat quiet test did not run"
   grep -q 'GET / on occupied live keeps #1 guest prize chrome' "$test_log" \
     || fail "occupied live prize-not-foot test did not run"
+  grep -q 'GET / on occupied live keeps one first click' "$test_log" \
+    || fail "occupied live host Lock after rundown test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \
