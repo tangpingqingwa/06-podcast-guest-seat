@@ -191,6 +191,8 @@ if [[ -f package.json ]]; then
   grep -q 'data-lock-after-open' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open"
   grep -q 'data-lock-after-open-first' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-first"
   grep -q 'lock-after-open-first' src/views/skin.ts || fail "lock-after-open-first claim missing hop-local CSS"
+  grep -q 'data-lock-after-open-two' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-two"
+  grep -q 'lock-after-open-two' src/views/skin.ts || fail "lock-after-open-two claim missing hop-local CSS"
   grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
   grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
@@ -360,6 +362,8 @@ if [[ -f package.json ]]; then
     || fail "lock-after-open-first guest first-read test did not run"
   grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is re-concentrated' "$test_log" \
     || fail "open-after-lock-two host-desk test did not run"
+  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is re-concentrated' "$test_log" \
+    || fail "lock-after-open-two guest first-read test did not run"
   grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
     || fail "N+1 first-guest bid test did not run"
   grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
