@@ -139,6 +139,12 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   margin-left: 0;
   text-align: left;
 }
+.claim[data-lock-certain] {
+  margin-top: 0;
+}
+.claim[data-lock-certain] .claim-title {
+  letter-spacing: -0.04em;
+}
 .claim[data-lock-after-open] {
   padding: 1rem 0.9rem 1.1rem;
   border: 1px solid var(--lamp);
