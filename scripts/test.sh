@@ -208,6 +208,8 @@ if [[ -f package.json ]]; then
   grep -q 'data-lock-after-open-five' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-five"
   grep -q 'lock-after-open-five' src/views/skin.ts || fail "lock-after-open-five claim missing hop-local CSS"
   grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
+  grep -q 'data-empty-honest' src/http/routes/pages.ts || fail "fresh-open board missing empty-honest stamp"
+  grep -q 'data-empty-honest' src/views/skin.ts || fail "fresh-open board missing empty-honest CSS"
   grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
   grep -q 'data-lock-certain' src/http/routes/pages.ts || fail "locked claim missing data-lock-certain"
@@ -398,6 +400,8 @@ if [[ -f package.json ]]; then
     || fail "N+1 first-guest bid test did not run"
   grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
     || fail "open-seat first-guest test did not run"
+  grep -q 'GET / on a fresh-open empty episode stays empty-honest' "$test_log" \
+    || fail "fresh-open empty-honest test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
