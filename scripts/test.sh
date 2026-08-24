@@ -176,6 +176,14 @@ if [[ -f package.json ]]; then
   grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
   grep -q 'data-guest-prize' src/http/routes/pages.ts || fail "live ranked seat missing guest prize mark"
   grep -q 'data-guest-prize' src/views/skin.ts || fail "live ranked seat missing prize-before-price CSS"
+  grep -q 'data-first-click="guest"' src/http/routes/pages.ts || fail "occupied #1 guest missing first-click mark"
+  grep -q 'data-first-click="guest"' src/views/skin.ts || fail "occupied #1 guest missing first-click CSS"
+  grep -q 'data-later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat mark"
+  grep -q 'later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat class"
+  grep -q 'data-later-seat' src/views/skin.ts || fail "occupied later seat missing later-seat CSS"
+  grep -q 'data-later-go' src/http/routes/pages.ts || fail "occupied later seat missing quieter /go mark"
+  grep -q 'later-name' src/http/routes/pages.ts || fail "occupied later seat missing quieter guest name"
+  grep -q 'guest.later-seat\[data-later-seat\]' src/views/skin.ts || fail "later seats must stay quieter than occupied #1"
   grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
   grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
   grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
@@ -220,6 +228,12 @@ if [[ -f package.json ]]; then
   grep -q 'studio-open-empty' src/views/skin.ts || fail "empty-open shell missing isolation CSS"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-guest-prize]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked guest-prize chrome"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-first-click="guest"]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked #1 guest first-click"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-seat]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-seat chrome"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-go]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-seat /go"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-fact]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-fact \$bid"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-lock-certain]' src/views/skin.ts \
@@ -434,6 +448,8 @@ if [[ -f package.json ]]; then
     || fail "live prize-before-price test did not run"
   grep -q 'GET / on an occupied live seat keeps \$bid a later fact' "$test_log" \
     || fail "occupied live later-fact \$bid test did not run"
+  grep -q 'GET / on occupied live keeps #1 guest the first click' "$test_log" \
+    || fail "occupied live #1 guest first-click test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \
