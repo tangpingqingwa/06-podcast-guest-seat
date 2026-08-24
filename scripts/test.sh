@@ -214,6 +214,8 @@ if [[ -f package.json ]]; then
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
   grep -q 'data-lock-certain' src/http/routes/pages.ts || fail "locked claim missing data-lock-certain"
   grep -q 'data-lock-certain' src/views/skin.ts || fail "locked claim missing lock-certain CSS"
+  grep -q 'data-lock-409' src/http/routes/pages.ts || fail "locked claim missing data-lock-409"
+  grep -q 'data-lock-409' src/views/skin.ts || fail "locked checkout missing lock-409 CSS"
   grep -q 'data-next-seat' src/http/routes/pages.ts || fail "N+1 board missing data-next-seat"
   grep -q 'takes #1' src/http/routes/pages.ts || fail "fresh-open board missing \$5 takes #1"
   grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
@@ -396,6 +398,8 @@ if [[ -f package.json ]]; then
     || fail "lock-after-open-five guest first-read test did not run"
   grep -q 'GET / after lock keeps Episode N is locked the first read' "$test_log" \
     || fail "lock-certain first-read test did not run"
+  grep -q 'GET / after lock still fail-closes checkout 409' "$test_log" \
+    || fail "locked checkout 409 test did not run"
   grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
     || fail "N+1 first-guest bid test did not run"
   grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \

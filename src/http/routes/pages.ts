@@ -223,7 +223,7 @@ function vetoNote(episode: Episode): string {
 
 function renderLockedClaim(episode: Episode): string {
   const label = escapeHtml(episode.label);
-  return `<section class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five" id="claim" data-claim-locked data-lock-certain data-lock-after-open data-lock-after-open-first data-lock-after-open-two data-lock-after-open-three data-lock-after-open-four data-lock-after-open-five>
+  return `<section class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five" id="claim" data-claim-locked data-lock-certain data-lock-409 data-lock-after-open data-lock-after-open-first data-lock-after-open-two data-lock-after-open-three data-lock-after-open-four data-lock-after-open-five>
   <h1 class="claim-title">${label} is locked</h1>
   <p class="claim-note">Rank is the bid. This episode is locked. Polar cannot charge. The next episode opens empty.</p>
   <p class="form-hint">This episode is locked. Polar cannot charge. Prior bids do not carry. Unpaid checkout does not rank.</p>
@@ -498,10 +498,12 @@ export function renderRulesHtml(): string {
 }
 
 export function renderCheckoutErrorHtml(code: string): string {
+  const locked = code === "episode_locked";
+  const mark = locked ? " data-lock-409" : "";
   return renderLayout({
     title: "Checkout · Podcast Guest Seat",
     path: "/",
-    body: `<article class="doc">
+    body: `<article class="doc"${mark}>
 <h1>Checkout did not start</h1>
 <p class="empty">${escapeHtml(code)}. Polar did not charge.</p>
 <p><a href="/">Back to the rundown</a></p>
