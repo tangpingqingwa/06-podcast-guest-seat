@@ -304,6 +304,11 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .tally { text-align: right; font-family: var(--mono); }
 .bid { margin: 0; color: var(--lamp); font-weight: 700; font-size: 1.05rem; }
 .guest[data-guest-prize] .bid { font-size: 0.88rem; font-weight: 600; }
+.guest[data-guest-prize] .bid.later-fact[data-later-fact] {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
 .clicks, .when { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.78rem; }
 .guest[data-guest-prize] .clicks { font-size: 0.72rem; }
 .empty {

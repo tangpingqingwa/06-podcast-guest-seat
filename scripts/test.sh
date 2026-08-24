@@ -176,6 +176,10 @@ if [[ -f package.json ]]; then
   grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
   grep -q 'data-guest-prize' src/http/routes/pages.ts || fail "live ranked seat missing guest prize mark"
   grep -q 'data-guest-prize' src/views/skin.ts || fail "live ranked seat missing prize-before-price CSS"
+  grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
+  grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
+  grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
+  grep -q 'bid.later-fact\[data-later-fact\]' src/views/skin.ts || fail "later-fact \$bid must stay muted beside the guest label"
   grep -q 'Polar cannot charge' src/http/routes/pages.ts \
     || fail "empty episode must explain Polar cannot charge"
   grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
@@ -410,6 +414,8 @@ if [[ -f package.json ]]; then
     || fail "studio guest-card test did not run"
   grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
     || fail "live prize-before-price test did not run"
+  grep -q 'GET / on an occupied live seat keeps \$bid a later fact' "$test_log" \
+    || fail "occupied live later-fact \$bid test did not run"
   grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
     || fail "HTML Outbid form test did not run"
   grep -q 'fixture checkout without network claims rank' "$test_log" \

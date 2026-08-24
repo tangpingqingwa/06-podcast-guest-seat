@@ -211,6 +211,7 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
+  assert.equal(countExact(studio, "data-later-fact"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
@@ -270,6 +271,7 @@ test("GET / with no episode tells first-time guests to skip the host desk", asyn
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
+  assert.equal(countExact(studio, "data-later-fact"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
@@ -423,6 +425,7 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.doesNotMatch(board.body, /data-claim-live/);
   assert.doesNotMatch(board.body, /data-open-seat/);
   assert.doesNotMatch(studioMarkup(board.body), /data-empty-honest/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-later-fact/);
   assert.doesNotMatch(board.body, /Seat is open/);
   assert.doesNotMatch(board.body, /class="outbid"/);
   assert.doesNotMatch(board.body, /name="bidUsd"/);
@@ -553,6 +556,7 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   assert.match(body, /Booked Co/);
   assert.match(body, /Highest remaining eligible bid/);
   assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
   const lockedTitleAt = studio.indexOf("Episode 12 is locked");
   const bookedAt = studio.indexOf("Booked Co");
   assert.notEqual(lockedTitleAt, -1);
@@ -2808,6 +2812,7 @@ test("GET / after lock keeps Episode N is locked the first read so Open N+1 and 
   assert.equal(countExact(studio, "data-open-after-lock-five"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-empty-honest/);
   assert.match(body, /data-lock-409/);
   assert.equal(countExact(studio, "data-lock-409"), 1);
@@ -2925,6 +2930,7 @@ test("GET / after lock still fail-closes checkout 409 — vetoed rows stay visib
   assert.equal(countExact(studio, "data-lock-certain"), 1);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
   assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-empty-honest/);
   assert.doesNotMatch(studio, /data-lock-409-first/);
   assert.doesNotMatch(studio, /data-lock-409-six/);
@@ -3073,6 +3079,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 2);
+  assert.equal(countExact(studio, "data-later-fact"), 0);
   assert.doesNotMatch(studio, /data-claim-locked/);
   assert.doesNotMatch(studio, /Episode 13 is locked/);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
@@ -3150,6 +3157,7 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   const studio = studioMarkup(body);
   assert.equal(countExact(studio, "data-empty-honest"), 2);
   assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-rundown/);
   assert.doesNotMatch(studio, /data-guest-skip/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
@@ -3241,6 +3249,7 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-rundown/);
   assert.doesNotMatch(studio, /data-empty-honest-first/);
   assert.doesNotMatch(studio, /data-empty-honest-six/);
@@ -3328,6 +3337,7 @@ test("studio rundown is a guest card, not a table: name, one-liner, site, bid, v
   assert.match(body, /data-claim-live/);
   assert.doesNotMatch(body, /data-open-seat/);
   assert.doesNotMatch(studioMarkup(body), /data-empty-honest/);
+  assert.match(studioMarkup(body), /class="bid later-fact"[^>]*data-later-fact/);
   assert.doesNotMatch(body, / data-next-seat/);
   assert.doesNotMatch(body, /Seat is open/);
   assert.match(body, /Already on this episode\?/);
@@ -3430,6 +3440,12 @@ test("GET / on a live ranked seat reads the guest label first and larger than $b
   assert.match(body, /Vetoed: hard sell/);
   assert.match(body, /data-listing-id="lst_veto"[^>]*data-vetoed="true"/);
   assert.equal(countExact(studio, "data-guest-prize"), 2);
+  assert.match(adaCard, /class="bid later-fact"[^>]*data-later-fact/);
+  assert.match(holdCard, /class="bid later-fact"[^>]*data-later-fact/);
+  assert.doesNotMatch(vetoCard, /data-later-fact/);
+  assert.doesNotMatch(vetoCard, /class="bid later-fact"/);
+  assert.equal(countExact(studio, "data-later-fact"), 2);
+  assert.equal(countExact(studio, 'class="bid later-fact"'), 2);
   assert.doesNotMatch(studio, /data-lock-certain/);
   assert.doesNotMatch(studio, /data-lock-409/);
   assert.doesNotMatch(studio, /data-empty-honest/);
@@ -3442,6 +3458,121 @@ test("GET / on a live ranked seat reads the guest label first and larger than $b
   assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
   assert.match(studioCss, /\.guest\[data-guest-prize\] \.bid/);
   assert.match(studioCss, /\.guest\[data-guest-prize\] \.clicks/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.bid\.later-fact\[data-later-fact\]/);
+});
+
+test("GET / on an occupied live seat keeps $bid a later fact beside the guest label", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_later_fact",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: episode.id,
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+    clicks: 3,
+  });
+  insertListing(db, {
+    id: "lst_hold",
+    episodeId: episode.id,
+    name: "Hold Co",
+    siteUrl: "https://hold.example/",
+    oneLiner: "Still listed below #1.",
+    bidUsd: 8,
+    firstBidAt: "2026-08-22T01:10:00.000Z",
+    paidAt: "2026-08-22T01:10:05.000Z",
+    clicks: 2,
+  });
+  insertListing(db, {
+    id: "lst_veto",
+    episodeId: episode.id,
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    clicks: 1,
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const studio = studioMarkup(body);
+  const adaStart = studio.indexOf('data-listing-id="lst_ada"');
+  const holdStart = studio.indexOf('data-listing-id="lst_hold"');
+  const vetoStart = studio.indexOf('data-listing-id="lst_veto"');
+  const rundownAt = studio.indexOf("data-rundown");
+  assert.notEqual(adaStart, -1);
+  assert.notEqual(holdStart, -1);
+  assert.notEqual(vetoStart, -1);
+  assert.notEqual(rundownAt, -1);
+  const adaCard = studio.slice(adaStart, holdStart);
+  const holdCard = studio.slice(holdStart, vetoStart);
+  const vetoCard = studio.slice(vetoStart);
+  const prizeAt = adaCard.indexOf("data-guest-prize");
+  const nameAt = adaCard.indexOf("Ada Lovelace");
+  const laterAt = adaCard.indexOf("data-later-fact");
+  const bidAt = adaCard.indexOf("$12");
+  const clicksAt = adaCard.indexOf("3 clicks");
+  assert.ok(rundownAt < adaStart);
+  assert.ok(prizeAt !== -1 && nameAt !== -1 && laterAt !== -1);
+  assert.ok(nameAt < laterAt);
+  assert.ok(laterAt < bidAt);
+  assert.ok(nameAt < bidAt);
+  assert.ok(bidAt < clicksAt);
+  assert.match(adaCard, /data-guest-prize/);
+  assert.match(adaCard, /class="guest-name"/);
+  assert.match(adaCard, /class="bid later-fact"[^>]*data-later-fact/);
+  assert.match(adaCard, /\$12/);
+  assert.match(adaCard, /3 clicks/);
+  assert.match(holdCard, /data-guest-prize/);
+  assert.match(holdCard, /class="bid later-fact"[^>]*data-later-fact/);
+  assert.match(holdCard, /\$8/);
+  assert.match(vetoCard, /data-vetoed="true"/);
+  assert.match(vetoCard, /Hard Sell Co/);
+  assert.match(vetoCard, /Vetoed: hard sell/);
+  assert.doesNotMatch(vetoCard, /data-guest-prize/);
+  assert.doesNotMatch(vetoCard, /data-later-fact/);
+  assert.doesNotMatch(vetoCard, /class="bid later-fact"/);
+  assert.equal(countExact(studio, "data-guest-prize"), 2);
+  assert.equal(countExact(studio, "data-later-fact"), 2);
+  assert.equal(countExact(studio, 'class="bid later-fact"'), 2);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, />Outbid</);
+  assert.match(body, /action="\/checkout"/);
+  assert.doesNotMatch(studio, /data-lock-certain/);
+  assert.doesNotMatch(studio, /data-lock-409/);
+  assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.doesNotMatch(studio, /data-later-fact-first/);
+  assert.doesNotMatch(studio, /data-later-fact-six/);
+  assert.doesNotMatch(studio, /lock-after-open-six/);
+  assert.doesNotMatch(body, /featured guest/i);
+  assert.doesNotMatch(body, /play count/i);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, /This episode is locked/);
+  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.bid\.later-fact\[data-later-fact\]/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.bid\.later-fact\[data-later-fact\]\s*\{[^}]*color:\s*var\(--muted\)/);
+  assert.doesNotMatch(
+    studioCss,
+    /\.guest\[data-guest-prize\] \.bid\.later-fact\[data-later-fact\]\s*\{[^}]*color:\s*var\(--lamp\)/,
+  );
 });
 
 test("GET / on an occupied open episode makes locking the episode the host action", async () => {
@@ -3524,6 +3655,8 @@ test("GET / on an occupied open episode makes locking the episode the host actio
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
+  assert.equal(countExact(studio, "data-later-fact"), 1);
+  assert.equal(countExact(studio, 'class="bid later-fact"'), 1);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
@@ -3618,6 +3751,7 @@ test("POST /host/lock from the desk locks the occupied episode so Polar cannot c
   assert.doesNotMatch(board.body, /data-claim-live/);
   assert.doesNotMatch(board.body, /data-open-seat/);
   assert.doesNotMatch(studioMarkup(board.body), /data-empty-honest/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-later-fact/);
 
   const checkout = await app.inject({
     method: "POST",
