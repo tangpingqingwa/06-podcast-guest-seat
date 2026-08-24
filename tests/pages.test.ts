@@ -209,6 +209,7 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.equal(countExact(studio, "open-after-lock-four"), 0);
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
@@ -267,6 +268,7 @@ test("GET / with no episode tells first-time guests to skip the host desk", asyn
   assert.equal(countExact(studio, "open-after-lock-four"), 0);
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
@@ -328,6 +330,7 @@ test("POST /host/open from the desk opens a guest-seat episode so Polar can char
   assert.match(board.body, /\$5 takes #1/);
   assert.match(board.body, /Polar can charge/);
   assert.doesNotMatch(studioMarkup(board.body), /data-lock-certain/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-lock-409/);
   assert.doesNotMatch(studioMarkup(board.body), /data-claim-locked/);
   assert.doesNotMatch(studioMarkup(board.body), /This episode is locked/);
   assert.doesNotMatch(board.body, /data-host-open/);
@@ -415,6 +418,7 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.match(board.body, /This episode is locked/);
   assert.match(board.body, /data-claim-locked/);
   assert.match(board.body, /data-lock-certain/);
+  assert.match(board.body, /data-lock-409/);
   assert.match(board.body, /Episode 12 is locked/);
   assert.doesNotMatch(board.body, /data-claim-live/);
   assert.doesNotMatch(board.body, /data-open-seat/);
@@ -2805,6 +2809,10 @@ test("GET / after lock keeps Episode N is locked the first read so Open N+1 and 
   assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.doesNotMatch(studio, /data-guest-prize/);
   assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.match(body, /data-lock-409/);
+  assert.equal(countExact(studio, "data-lock-409"), 1);
+  assert.doesNotMatch(body, /data-lock-409-first/);
+  assert.doesNotMatch(body, /data-lock-409-six/);
   assert.doesNotMatch(body, /data-lock-certain-first/);
   assert.doesNotMatch(body, /data-lock-certain-six/);
   assert.doesNotMatch(body, /lock-after-open-six/);
@@ -2821,6 +2829,7 @@ test("GET / after lock keeps Episode N is locked the first read so Open N+1 and 
   assert.doesNotMatch(body, /featured guest/i);
   const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
   assert.match(studioCss, /\.claim\[data-lock-certain\]/);
+  assert.match(studioCss, /\.claim\[data-lock-409\]/);
   assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
 
   const checkout = await app.inject({
@@ -2836,6 +2845,146 @@ test("GET / after lock keeps Episode N is locked the first read so Open N+1 and 
   assert.equal(checkout.statusCode, 409);
   assert.match(checkout.body, /episode_locked/);
   assert.match(checkout.body, /Polar did not charge/);
+  assert.match(checkout.body, /data-lock-409/);
+  assert.doesNotMatch(checkout.body, /data-claim-live/);
+  assert.doesNotMatch(checkout.body, /action="\/checkout"/);
+});
+
+test("GET / after lock still fail-closes checkout 409 — vetoed rows stay visible", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_lock_409",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    lockedAt: "2026-08-22T12:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_lock_409",
+    episodeId: "ep_lock_409",
+    name: "Booked Co",
+    siteUrl: "https://booked.example/",
+    oneLiner: "Highest remaining eligible bid.",
+    bidUsd: 9,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  insertListing(db, {
+    id: "lst_lock_409_veto",
+    episodeId: "ep_lock_409",
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  const body = board.body;
+  const studio = studioMarkup(body);
+  const claimAt = studio.indexOf('id="claim"');
+  const lock409At = studio.indexOf("data-lock-409");
+  const lockCertainAt = studio.indexOf("data-lock-certain");
+  const lockedTitleAt = studio.indexOf("Episode 12 is locked");
+  const ticketAt = studio.indexOf("data-show-ticket");
+  const rundownAt = studio.indexOf("data-rundown");
+  const bookedAt = studio.indexOf("Booked Co");
+  const vetoAt = studio.indexOf("Hard Sell Co");
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(lock409At, -1);
+  assert.notEqual(lockCertainAt, -1);
+  assert.notEqual(lockedTitleAt, -1);
+  assert.notEqual(ticketAt, -1);
+  assert.notEqual(rundownAt, -1);
+  assert.notEqual(bookedAt, -1);
+  assert.notEqual(vetoAt, -1);
+  assert.ok(claimAt < ticketAt);
+  assert.ok(lock409At < ticketAt);
+  assert.ok(lockCertainAt < ticketAt);
+  assert.ok(lockedTitleAt < ticketAt);
+  assert.ok(lockedTitleAt < rundownAt);
+  assert.ok(rundownAt < bookedAt);
+  assert.ok(rundownAt < vetoAt);
+  assert.match(body, /data-lock-409/);
+  assert.match(body, /data-lock-certain/);
+  assert.match(body, /data-claim-locked/);
+  assert.match(body, /Episode 12 is locked/);
+  assert.match(body, /This episode is locked/);
+  assert.match(body, /Polar cannot charge/);
+  assert.match(body, /Booked Co/);
+  assert.match(body, /Hard Sell Co/);
+  assert.match(body, /Vetoed: hard sell/);
+  assert.match(body, /data-listing-id="lst_lock_409_veto"[^>]*data-vetoed="true"/);
+  assert.equal(countExact(studio, "data-lock-409"), 1);
+  assert.equal(countExact(studio, "data-lock-certain"), 1);
+  assert.equal(countExact(studio, "data-claim-locked"), 1);
+  assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.doesNotMatch(studio, /data-lock-409-first/);
+  assert.doesNotMatch(studio, /data-lock-409-six/);
+  assert.doesNotMatch(studio, /data-lock-409-after/);
+  assert.doesNotMatch(body, /data-claim-live/);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, /Seat is open/);
+  assert.doesNotMatch(body, /\$5 takes #1/);
+  assert.doesNotMatch(body, /name="bidUsd"/);
+  assert.doesNotMatch(body, /class="outbid"/);
+  assert.doesNotMatch(body, /action="\/checkout"/);
+  assert.doesNotMatch(body, /featured guest/i);
+  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
+  assert.match(studioCss, /\.claim\[data-lock-409\]/);
+  assert.match(studioCss, /\.doc\[data-lock-409\] \.empty/);
+  assert.match(studioCss, /\.claim\[data-lock-certain\]/);
+  assert.match(studioCss, /\.claim\[data-empty-honest\]/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_lock_409&name=Late%20Co&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Should%20not%20bid.&bidUsd=20",
+  });
+  assert.equal(checkout.statusCode, 409);
+  assert.match(checkout.body, /episode_locked/);
+  assert.match(checkout.body, /Polar did not charge/);
+  assert.match(checkout.body, /data-lock-409/);
+  assert.match(checkout.body, /Checkout did not start/);
+  const checkoutDoc = checkout.body.slice(
+    checkout.body.indexOf("<article"),
+    checkout.body.indexOf("</article>") + "</article>".length,
+  );
+  assert.match(checkoutDoc, /data-lock-409/);
+  assert.match(checkoutDoc, /episode_locked/);
+  assert.doesNotMatch(checkoutDoc, /data-claim-live/);
+  assert.doesNotMatch(checkoutDoc, /name="bidUsd"/);
+  assert.doesNotMatch(checkoutDoc, /class="outbid"/);
+  assert.doesNotMatch(checkoutDoc, /action="\/checkout"/);
+  assert.doesNotMatch(checkoutDoc, /data-empty-honest/);
+  assert.doesNotMatch(checkoutDoc, /data-open-seat/);
+  const jsonCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: { "content-type": "application/json" },
+    payload: {
+      episodeId: "ep_lock_409",
+      name: "Late Co",
+      siteUrl: "https://late.example/",
+      oneLiner: "Should not bid.",
+      bidUsd: 20,
+    },
+  });
+  assert.equal(jsonCheckout.statusCode, 409);
+  assert.deepEqual(jsonCheckout.json(), { error: "episode_locked" });
 });
 
 test("GET / after the host opens N+1 makes bidding that empty seat live", async () => {
@@ -2922,6 +3071,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.equal(countExact(studio, "open-after-lock-four"), 0);
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 2);
   assert.doesNotMatch(studio, /data-claim-locked/);
   assert.doesNotMatch(studio, /Episode 13 is locked/);
@@ -3014,6 +3164,7 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.equal(countExact(studio, "open-after-lock-four"), 0);
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
@@ -3085,6 +3236,7 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.match(body, /data-episode-open="true"/);
   assert.equal(countExact(studio, "data-empty-honest"), 2);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-claim-locked"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
@@ -3279,6 +3431,7 @@ test("GET / on a live ranked seat reads the guest label first and larger than $b
   assert.match(body, /data-listing-id="lst_veto"[^>]*data-vetoed="true"/);
   assert.equal(countExact(studio, "data-guest-prize"), 2);
   assert.doesNotMatch(studio, /data-lock-certain/);
+  assert.doesNotMatch(studio, /data-lock-409/);
   assert.doesNotMatch(studio, /data-empty-honest/);
   assert.doesNotMatch(body, /downloads/i);
   assert.doesNotMatch(body, /featured guest/i);
@@ -3369,6 +3522,7 @@ test("GET / on an occupied open episode makes locking the episode the host actio
   assert.equal(countExact(studio, "open-after-lock-four"), 0);
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
+  assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-empty-honest"), 0);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 0);
@@ -3444,6 +3598,7 @@ test("POST /host/lock from the desk locks the occupied episode so Polar cannot c
   assert.match(board.body, /Open Episode 13/);
   assert.match(board.body, /data-claim-locked/);
   assert.match(board.body, /data-lock-certain/);
+  assert.match(board.body, /data-lock-409/);
   assert.match(board.body, /Episode 12 is locked/);
   assert.match(board.body, /data-open-after-lock-first/);
   assert.match(board.body, /data-open-after-lock-two/);
@@ -3477,6 +3632,7 @@ test("POST /host/lock from the desk locks the occupied episode so Polar cannot c
   assert.equal(checkout.statusCode, 409);
   assert.match(checkout.body, /episode_locked/);
   assert.match(checkout.body, /Polar did not charge/);
+  assert.match(checkout.body, /data-lock-409/);
 });
 
 test("SPEC 15: public click /go/:id 302 + clicks increment", async () => {

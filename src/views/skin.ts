@@ -145,6 +145,15 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .claim[data-lock-certain] .claim-title {
   letter-spacing: -0.04em;
 }
+.claim[data-lock-409] {
+  margin-top: 0;
+}
+.claim[data-lock-409] .claim-title {
+  letter-spacing: -0.04em;
+}
+.doc[data-lock-409] .empty {
+  letter-spacing: -0.02em;
+}
 .claim[data-empty-honest] {
   margin-top: 0;
 }
