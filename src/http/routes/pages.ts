@@ -189,23 +189,39 @@ function renderShowTicket(episode: Episode | undefined): string {
 function renderGuestCard(row: BoardRow, now: Date, live = false): string {
   const cue = row.vetoed ? "VETO" : row.rank === null ? "—" : `#${row.rank}`;
   const kind = row.vetoed ? "CUT" : row.rank === 1 ? "SEAT" : "HOLD";
-  const klass = row.vetoed ? " guest vetoed" : row.rank === 1 ? " guest booked" : " guest";
-  const prize = live && row.rank !== null && !row.vetoed;
+  const prize = live && row.rank === 1 && !row.vetoed;
+  const laterSeat = live && row.rank !== null && row.rank > 1 && !row.vetoed;
+  const klass = row.vetoed
+    ? " guest vetoed"
+    : row.rank === 1
+      ? " guest booked"
+      : laterSeat
+        ? " guest later-seat"
+        : " guest";
   const laterFact = prize ? " later-fact" : "";
   const laterMark = prize ? " data-later-fact" : "";
   const veto = row.vetoed
     ? `<p class="guest-veto">Vetoed${row.vetoReason ? `: ${escapeHtml(row.vetoReason)}` : ""}</p>`
     : "";
   const go = `/go/${escapeHtml(row.id)}`;
-  return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}"${prize ? " data-guest-prize" : ""}>
+  const name = prize
+    ? `<h2 class="guest-name"><a href="${go}" data-first-click="guest">${escapeHtml(row.name)}</a></h2>`
+    : laterSeat
+      ? `<p class="guest-name later-name">${escapeHtml(row.name)}</p>`
+      : `<h2 class="guest-name"><a href="${go}">${escapeHtml(row.name)}</a></h2>`;
+  const site = laterSeat
+    ? `<p class="guest-site later-go"><a href="${go}" data-later-go>${escapeHtml(displaySite(row.siteUrl))}</a></p>`
+    : `<p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>`;
+  const marks = `${prize ? " data-guest-prize" : ""}${laterSeat ? " data-later-seat" : ""}`;
+  return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}"${marks}>
   <div class="cue">
     <span class="cue-num">${cue}</span>
     <span class="cue-kind">${kind}</span>
   </div>
   <div class="person">
-    <h2 class="guest-name"><a href="${go}">${escapeHtml(row.name)}</a></h2>
+    ${name}
     <p class="guest-line">${escapeHtml(row.oneLiner)}</p>
-    <p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>
+    ${site}
     ${veto}
   </div>
   <div class="tally">
