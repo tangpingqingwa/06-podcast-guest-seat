@@ -212,7 +212,9 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
       : `<h2 class="guest-name"><a href="${go}">${escapeHtml(row.name)}</a></h2>`;
   const site = laterSeat
     ? ""
-    : `<p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>`;
+    : prize
+      ? `<p class="guest-site">${escapeHtml(displaySite(row.siteUrl))}</p>`
+      : `<p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>`;
   const laterFoot = laterSeat
     ? `<footer class="later-foot" data-later-foot>
     <a class="later-go" href="${go}" data-later-go>${escapeHtml(displaySite(row.siteUrl))}</a>
@@ -221,7 +223,14 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
     <time class="when" datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time>
   </footer>`
     : "";
-  const tally = laterSeat
+  const prizeFacts = prize
+    ? `<p class="later-facts" data-later-facts>
+    <span class="bid${laterFact}"${laterMark}>$${row.bidUsd}</span>
+    <span class="clicks">${row.clicks} clicks</span>
+    <time class="when" datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time>
+  </p>`
+    : "";
+  const tally = prize || laterSeat
     ? ""
     : `<div class="tally">
     <p class="bid${laterFact}"${laterMark}>$${row.bidUsd}</p>
@@ -238,6 +247,7 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
     ${name}
     <p class="guest-line">${escapeHtml(row.oneLiner)}</p>
     ${site}
+    ${prizeFacts}
     ${veto}
   </div>
   ${tally}
