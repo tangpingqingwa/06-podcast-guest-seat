@@ -354,6 +354,23 @@ function renderHostOpenDesk(input: {
 </section>`;
 }
 
+function studioShell(input: {
+  episode: Episode | undefined;
+  canCharge: boolean;
+  emptyBoard: boolean;
+}): { className: string; marks: string } {
+  if (!input.episode) {
+    return { className: "studio studio-waiting", marks: "" };
+  }
+  if (!input.canCharge) {
+    return { className: "studio studio-locked", marks: "" };
+  }
+  if (input.emptyBoard) {
+    return { className: "studio studio-open-empty", marks: " data-empty-honest" };
+  }
+  return { className: "studio studio-open-occupied", marks: "" };
+}
+
 function renderHostLockDesk(episode: Episode, booked: BoardRow | undefined): string {
   const label = escapeHtml(episode.label);
   const lead = booked
@@ -417,6 +434,11 @@ export function renderBoardHtml(
       ? renderHostLockDesk(episode, booked)
       : "";
   const ticket = renderShowTicket(episode);
+  const shell = studioShell({
+    episode,
+    canCharge,
+    emptyBoard: rows.length === 0,
+  });
   const studio = nextSeat
     ? `${claim}
 ${ticket}
@@ -433,7 +455,7 @@ ${rundown}`;
   return renderLayout({
     title: episode ? `${episode.label} · Podcast Guest Seat` : "Podcast Guest Seat",
     path,
-    body: `<div class="studio">
+    body: `<div class="${shell.className}"${shell.marks}>
 ${studio}
 </div>
 <script>
