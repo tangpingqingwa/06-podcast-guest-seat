@@ -318,6 +318,7 @@ function renderClaim(input: {
   const honest = openEmpty ? " data-empty-honest" : "";
   const nextMark = nextSeat ? " data-next-seat" : "";
   const emptyClaimFirst = openEmpty;
+  const occupiedLive = Boolean(episode && input.canCharge && !input.emptyBoard);
   const title = emptyClaimFirst
     ? "Claim #1 for"
     : `Claim the ${escapeHtml(seat)} for`;
@@ -334,10 +335,16 @@ function renderClaim(input: {
     </div>`
     : `${identityFields}
     <button type="submit" class="outbid"${disabled}>Outbid</button>`;
-  const claimClass = emptyClaimFirst ? "claim empty-claim-first" : "claim";
+  const claimClass = emptyClaimFirst
+    ? "claim empty-claim-first"
+    : occupiedLive
+      ? "claim later-claim"
+      : "claim";
   const emptyClaimMarks = emptyClaimFirst
     ? ' data-empty-claim-first aria-label="Claim #1"'
-    : "";
+    : occupiedLive
+      ? " data-later-claim"
+      : "";
   const titleMarks = emptyClaimFirst ? ' data-empty-claim data-first-click="claim"' : "";
   return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title"${titleMarks}>
@@ -516,8 +523,8 @@ ${desk}
 ${rundown}`
       : occupiedLive
         ? `${ticket}
-${claim}
 ${rundown}
+${claim}
 ${desk}`
         : `${ticket}
 ${desk}

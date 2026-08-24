@@ -196,6 +196,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-foot],
 .studio.studio-open-empty[data-empty-honest] [data-later-facts],
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim],
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
 .studio.studio-open-empty[data-empty-honest] [data-claim-locked],
 .studio.studio-open-empty[data-empty-honest] [data-lock-certain],
@@ -212,9 +213,11 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-foot],
 .studio.studio-open-empty [data-later-facts],
 .studio.studio-open-empty [data-later-fact],
+.studio.studio-open-empty [data-later-claim],
 .studio.studio-open-empty [data-paid-at],
 .studio.studio-open-empty .later-fact,
 .studio.studio-open-empty .later-facts,
+.studio.studio-open-empty .later-claim,
 .studio.studio-open-empty .guest.later-seat,
 .studio.studio-open-empty .later-name,
 .studio.studio-open-empty .later-go,
@@ -522,7 +525,8 @@ footer { color: var(--muted); font-size: 0.85rem; }
 `;
 
 /* Occupied live only: Polar-paid #1 guest is the first click; later seats stay quieter.
-   Host Lock is a later write after the rundown. Empty open / unpaid checkout must not inherit this. */
+   Claim is a later write after the rundown. Host Lock stays after that hop.
+   Empty open / unpaid checkout must not inherit this. */
 export const OCCUPIED_CSS = /* css */ `
 .studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] {
   grid-template-columns: 3.4rem 1fr;
@@ -609,6 +613,35 @@ export const OCCUPIED_CSS = /* css */ `
 .studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts] .when {
   font-size: 0.72rem;
   color: var(--muted);
+}
+/* Occupied live: Claim is a later write after the #1 guest / rundown. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] {
+  margin-top: 0.35rem;
+  padding: 0.75rem 0 0.4rem;
+  border-top: 1px dashed var(--line);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-title {
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: #d9ccb4;
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note,
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field {
+  font-size: 0.95em;
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .step {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .outbid {
+  height: 2.35rem;
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 `;
 
