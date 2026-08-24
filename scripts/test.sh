@@ -204,6 +204,19 @@ if [[ -f package.json ]]; then
   grep -q 'data-paid-at' src/views/skin.ts || fail "occupied #1 prize CSS missing Polar paid-at"
   grep -q 'data-first-click="guest"' src/http/routes/pages.ts || fail "occupied #1 guest missing first-click mark"
   grep -q 'data-first-click="guest"' src/views/skin.ts || fail "occupied #1 guest missing first-click CSS"
+  grep -q 'data-later-claim' src/http/routes/pages.ts || fail "occupied Claim missing later-claim stamp"
+  grep -q 'later-claim' src/http/routes/pages.ts || fail "occupied Claim missing later-claim class"
+  grep -q '"claim later-claim"' src/http/routes/pages.ts \
+    || fail "occupied Claim must compose later-claim, not a same-weight rail"
+  grep -q 'data-later-claim' src/views/skin.ts || fail "occupied later-claim CSS missing later-claim stamp"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim]' src/views/skin.ts \
+    || fail "occupied later-claim CSS must be scoped to Polar-paid studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-title' src/views/skin.ts \
+    || fail "occupied later-claim title CSS must recede after the #1 guest"
+  grep -q 'Occupied live: Claim is a later write after the #1 guest' src/views/skin.ts \
+    || fail "occupied CSS must document Claim as a later write after the #1 guest"
+  grep -F -q $'${ticket}\n${rundown}\n${claim}\n${desk}' src/http/routes/pages.ts \
+    || fail "occupied live Claim must render after the rundown, not above the #1 guest"
   grep -q 'data-later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat mark"
   grep -q 'later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat class"
   grep -q 'data-later-seat' src/views/skin.ts || fail "occupied later seat missing later-seat CSS"
@@ -249,6 +262,16 @@ if [[ -f package.json ]]; then
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; compose occupied Lock after the rundown"
   fi
+  if grep -nE 'data-guest-before-claim|data-claim-after-guest|claim-after-guest|guest-before-claim-N' \
+    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
+    fail "do not stamp another named hop; compose occupied Claim after the #1 guest"
+  fi
+  if grep -E '^\.claim\.later-claim' src/views/skin.ts >/dev/null; then
+    fail "later-claim CSS must not leak globally onto empty open"
+  fi
+  if grep -E '^\.later-claim' src/views/skin.ts >/dev/null; then
+    fail "later-claim CSS must not leak globally onto empty open"
+  fi
   grep -q 'paidListings' src/http/routes/pages.ts \
     || fail "rundown occupancy must compose Polar-paid rows only"
   grep -q 'isPaidListing' src/http/routes/pages.ts \
@@ -259,8 +282,8 @@ if [[ -f package.json ]]; then
     src/http/routes/pages.ts src/views/skin.ts src/http/routes/go.ts >/dev/null; then
     fail "unpaid-off occupancy must not add another named hop"
   fi
-  grep -F -q $'${rundown}\n${desk}' src/http/routes/pages.ts \
-    || fail "occupied live host Lock must render after the rundown"
+  grep -F -q $'${rundown}\n${claim}\n${desk}' src/http/routes/pages.ts \
+    || fail "occupied live host Lock must render after the rundown (Claim is a later write between them)"
   grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
   grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
   grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
@@ -315,6 +338,8 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked later-foot chrome"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-facts]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-facts chrome"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-paid-at]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked Polar paid-at chrome"
   grep -F -q '.studio.studio-open-empty [data-guest-prize]' src/views/skin.ts \
@@ -329,12 +354,16 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked later-foot without stamp-only"
   grep -F -q '.studio.studio-open-empty [data-later-facts]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-facts without stamp-only"
+  grep -F -q '.studio.studio-open-empty [data-later-claim]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim without stamp-only"
   grep -F -q '.studio.studio-open-empty [data-paid-at]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked Polar paid-at without stamp-only"
   grep -F -q '.studio.studio-open-empty .later-fact' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-fact class"
   grep -F -q '.studio.studio-open-empty .later-facts' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-facts class"
+  grep -F -q '.studio.studio-open-empty .later-claim' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-claim class"
   grep -F -q '.studio.studio-open-empty .guest.later-seat' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-seat class"
   grep -F -q '.studio.studio-open-empty .later-foot' src/views/skin.ts \
@@ -565,6 +594,8 @@ if [[ -f package.json ]]; then
     || fail "occupied live prize-not-foot test did not run"
   grep -q 'GET / on occupied live keeps one first click' "$test_log" \
     || fail "occupied live host Lock after rundown test did not run"
+  grep -q 'Claim stays after the #1 guest' "$test_log" \
+    || fail "occupied live Claim after #1 guest leftover test did not run"
   grep -q 'unpaid stays off the rundown' "$test_log" \
     || fail "unpaid stays off the rundown leftover test did not run"
   grep -q 'No #1 guest until Polar reports paid' "$test_log" \
