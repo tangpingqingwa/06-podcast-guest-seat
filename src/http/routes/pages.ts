@@ -8,7 +8,7 @@ import {
 } from "../../episodes.js";
 import { listListingsForEpisode, type Listing } from "../../listings.js";
 import { MIN_BID_USD, rankListings, type RankedListing } from "../../rank.js";
-import { BOARD_CSS } from "../../views/skin.js";
+import { BOARD_CSS, STUDIO_CSS } from "../../views/skin.js";
 
 export const BOARD_PATH = "/" as const;
 export const EPISODE_BOARD_PATH = "/e/:episodeId" as const;
@@ -109,6 +109,7 @@ function renderLayout(input: {
   title: string;
   path: string;
   body: string;
+  css?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -119,7 +120,7 @@ function renderLayout(input: {
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  <style>${BOARD_CSS}</style>
+  <style>${input.css ?? STUDIO_CSS}</style>
 </head>
 <body>
   <header class="site-header">
@@ -455,6 +456,7 @@ export function renderBoardHtml(
     canCharge,
     emptyBoard: rows.length === 0,
   });
+  const occupiedLive = Boolean(canCharge && rows.length > 0);
   const studio = nextSeat
     ? `${claim}
 ${ticket}
@@ -471,6 +473,7 @@ ${rundown}`;
   return renderLayout({
     title: episode ? `${episode.label} · Podcast Guest Seat` : "Podcast Guest Seat",
     path,
+    css: occupiedLive ? BOARD_CSS : STUDIO_CSS,
     body: `<div class="${shell.className}"${shell.marks}>
 ${studio}
 </div>

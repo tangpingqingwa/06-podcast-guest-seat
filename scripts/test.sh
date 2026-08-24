@@ -184,6 +184,20 @@ if [[ -f package.json ]]; then
   grep -q 'data-later-go' src/http/routes/pages.ts || fail "occupied later seat missing quieter /go mark"
   grep -q 'later-name' src/http/routes/pages.ts || fail "occupied later seat missing quieter guest name"
   grep -q 'guest.later-seat\[data-later-seat\]' src/views/skin.ts || fail "later seats must stay quieter than occupied #1"
+  grep -q 'export const STUDIO_CSS' src/views/skin.ts || fail "empty-open studio CSS missing STUDIO_CSS"
+  grep -q 'export const OCCUPIED_CSS' src/views/skin.ts || fail "occupied guest-one-first CSS missing OCCUPIED_CSS"
+  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize] .guest-name' src/views/skin.ts \
+    || fail "occupied #1 guest prize CSS must be scoped to studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize] .guest-name a[data-first-click="guest"]' src/views/skin.ts \
+    || fail "occupied #1 guest first-click CSS must be scoped to studio-open-occupied"
+  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat]' src/views/skin.ts \
+    || fail "later-seat CSS must be scoped to studio-open-occupied"
+  if grep -E '^\.guest\[data-guest-prize\]' src/views/skin.ts >/dev/null; then
+    fail "guest-prize CSS must not leak globally onto empty open"
+  fi
+  if grep -E '^\.guest\.later-seat\[data-later-seat\]' src/views/skin.ts >/dev/null; then
+    fail "later-seat CSS must not leak globally onto empty open"
+  fi
   grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
   grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
   grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
@@ -234,6 +248,18 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked later-seat chrome"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-go]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-seat /go"
+  grep -F -q '.studio.studio-open-empty [data-guest-prize]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked guest-prize without stamp-only"
+  grep -F -q '.studio.studio-open-empty [data-first-click="guest"]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked #1 guest first-click without stamp-only"
+  grep -F -q '.studio.studio-open-empty [data-later-seat]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-seat without stamp-only"
+  grep -F -q '.studio.studio-open-empty [data-later-go]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-seat /go without stamp-only"
+  grep -F -q '.studio.studio-open-empty .later-fact' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-fact class"
+  grep -F -q '.studio.studio-open-empty .guest.later-seat' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-seat class"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-fact]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked later-fact \$bid"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-lock-certain]' src/views/skin.ts \
@@ -442,6 +468,8 @@ if [[ -f package.json ]]; then
     || fail "fresh-open empty-honest test did not run"
   grep -q 'GET / on a fresh-open empty episode isolates \$5 from lock / prize leak' "$test_log" \
     || fail "fresh-open empty-open isolation test did not run"
+  grep -q 'GET / on a fresh-open empty episode keeps \$5 honest' "$test_log" \
+    || fail "fresh-open empty-open guest-one-first leak isolation test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
