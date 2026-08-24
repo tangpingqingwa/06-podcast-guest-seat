@@ -211,8 +211,23 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
       ? `<p class="guest-name later-name">${escapeHtml(row.name)}</p>`
       : `<h2 class="guest-name"><a href="${go}">${escapeHtml(row.name)}</a></h2>`;
   const site = laterSeat
-    ? `<p class="guest-site later-go"><a href="${go}" data-later-go>${escapeHtml(displaySite(row.siteUrl))}</a></p>`
+    ? ""
     : `<p class="guest-site"><a href="${go}">${escapeHtml(displaySite(row.siteUrl))}</a></p>`;
+  const laterFoot = laterSeat
+    ? `<footer class="later-foot" data-later-foot>
+    <a class="later-go" href="${go}" data-later-go>${escapeHtml(displaySite(row.siteUrl))}</a>
+    <span class="bid later-bid">$${row.bidUsd}</span>
+    <span class="clicks">${row.clicks} clicks</span>
+    <time class="when" datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time>
+  </footer>`
+    : "";
+  const tally = laterSeat
+    ? ""
+    : `<div class="tally">
+    <p class="bid${laterFact}"${laterMark}>$${row.bidUsd}</p>
+    <p class="clicks">${row.clicks} clicks</p>
+    <p class="when"><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></p>
+  </div>`;
   const marks = `${prize ? " data-guest-prize" : ""}${laterSeat ? " data-later-seat" : ""}`;
   return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}"${marks}>
   <div class="cue">
@@ -225,11 +240,8 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
     ${site}
     ${veto}
   </div>
-  <div class="tally">
-    <p class="bid${laterFact}"${laterMark}>$${row.bidUsd}</p>
-    <p class="clicks">${row.clicks} clicks</p>
-    <p class="when"><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></p>
-  </div>
+  ${tally}
+  ${laterFoot}
 </article>`;
 }
 
