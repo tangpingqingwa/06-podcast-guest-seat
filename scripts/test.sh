@@ -214,6 +214,22 @@ if [[ -f package.json ]]; then
   grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
   grep -q 'data-empty-honest' src/http/routes/pages.ts || fail "fresh-open board missing empty-honest stamp"
   grep -q 'data-empty-honest' src/views/skin.ts || fail "fresh-open board missing empty-honest CSS"
+  grep -q 'studio-open-empty' src/http/routes/pages.ts || fail "fresh-open board missing empty-open studio shell"
+  grep -q 'studio-open-occupied' src/http/routes/pages.ts || fail "occupied live board missing occupied studio shell"
+  grep -q 'studio-locked' src/http/routes/pages.ts || fail "locked board missing locked studio shell"
+  grep -q 'studio-open-empty' src/views/skin.ts || fail "empty-open shell missing isolation CSS"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-guest-prize]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked guest-prize chrome"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-fact]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-fact \$bid"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-lock-certain]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked lock-certain chrome"
+  grep -F -q '.studio.studio-open-occupied .empty.open-seat' src/views/skin.ts \
+    || fail "occupied live board must hide empty-open \$5 slab"
+  grep -q 'function studioShell' src/http/routes/pages.ts || fail "board missing studioShell isolation"
+  if grep -Eq 'empty-honest-(first|six|after)|studio-after-empty-N' src/http/routes/pages.ts src/views/skin.ts; then
+    fail "empty-open isolation must not stamp *-after-*-N"
+  fi
   grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
   grep -q 'data-lock-certain' src/http/routes/pages.ts || fail "locked claim missing data-lock-certain"
@@ -410,6 +426,8 @@ if [[ -f package.json ]]; then
     || fail "open-seat first-guest test did not run"
   grep -q 'GET / on a fresh-open empty episode stays empty-honest' "$test_log" \
     || fail "fresh-open empty-honest test did not run"
+  grep -q 'GET / on a fresh-open empty episode isolates \$5 from lock / prize leak' "$test_log" \
+    || fail "fresh-open empty-open isolation test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \

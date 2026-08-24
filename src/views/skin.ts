@@ -163,6 +163,26 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .empty[data-empty-honest] .empty-lead {
   letter-spacing: -0.03em;
 }
+.studio.studio-open-empty[data-empty-honest] [data-guest-prize],
+.studio.studio-open-empty[data-empty-honest] [data-later-fact],
+.studio.studio-open-empty[data-empty-honest] [data-claim-locked],
+.studio.studio-open-empty[data-empty-honest] [data-lock-certain],
+.studio.studio-open-empty[data-empty-honest] [data-lock-409],
+.studio.studio-open-empty[data-empty-honest] [data-lock-after-open],
+.studio.studio-open-empty[data-empty-honest] [data-host-lock],
+.studio.studio-open-empty[data-empty-honest] [data-host-open],
+.studio.studio-open-empty[data-empty-honest] .rundown,
+.studio.studio-open-empty[data-empty-honest] .guest {
+  display: none;
+}
+.studio.studio-open-occupied .empty.open-seat,
+.studio.studio-locked .empty.open-seat,
+.studio.studio-waiting .empty.open-seat {
+  display: none;
+}
+.studio.studio-open-empty[data-empty-honest] .empty.open-seat[data-empty-honest] {
+  display: grid;
+}
 .claim[data-lock-after-open] {
   padding: 1rem 0.9rem 1.1rem;
   border: 1px solid var(--lamp);

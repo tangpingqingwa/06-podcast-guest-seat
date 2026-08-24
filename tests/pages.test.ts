@@ -13,7 +13,7 @@ function memoryDb() {
 }
 
 function studioMarkup(html: string): string {
-  const start = html.indexOf('<div class="studio">');
+  const start = html.search(/<div class="studio(?:\s[^"]*)?"/);
   const end = html.indexOf("<script>", start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
@@ -197,6 +197,9 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.match(body, /Open Episode 1/);
   assert.match(body, /class="open-next"/);
   const studio = studioMarkup(body);
+  assert.match(studio, /class="studio studio-waiting"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-two"), 0);
@@ -257,6 +260,9 @@ test("GET / with no episode tells first-time guests to skip the host desk", asyn
   assert.match(body, /Open Episode 1/);
   assert.match(body, /class="open-next"/);
   const studio = studioMarkup(body);
+  assert.match(studio, /class="studio studio-waiting"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-two"), 0);
@@ -331,12 +337,16 @@ test("POST /host/open from the desk opens a guest-seat episode so Polar can char
   assert.match(board.body, /Seat is open/);
   assert.match(board.body, /\$5 takes #1/);
   assert.match(board.body, /Polar can charge/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-lock-certain/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-lock-409/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-claim-locked/);
-  assert.doesNotMatch(studioMarkup(board.body), /This episode is locked/);
-  assert.doesNotMatch(board.body, /data-host-open/);
-  assert.doesNotMatch(board.body, /data-host-lock/);
+  const openedStudio = studioMarkup(board.body);
+  assert.match(openedStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.equal(countExact(openedStudio, "data-empty-honest"), 3);
+  assert.doesNotMatch(openedStudio, /studio-open-occupied/);
+  assert.doesNotMatch(openedStudio, /data-lock-certain/);
+  assert.doesNotMatch(openedStudio, /data-lock-409/);
+  assert.doesNotMatch(openedStudio, /data-claim-locked/);
+  assert.doesNotMatch(openedStudio, /This episode is locked/);
+  assert.doesNotMatch(openedStudio, /data-host-open/);
+  assert.doesNotMatch(openedStudio, /data-host-lock/);
   assert.doesNotMatch(board.body, /data-host-only/);
   assert.doesNotMatch(board.body, /data-guest-skip/);
   assert.doesNotMatch(board.body, /data-waiting-on-host/);
@@ -431,7 +441,7 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.doesNotMatch(board.body, /name="bidUsd"/);
   assert.doesNotMatch(board.body, /action="\/checkout"/);
   assert.doesNotMatch(board.body, /class="open-next outbid"/);
-  assert.doesNotMatch(board.body, /data-host-lock/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-host-lock/);
   assert.doesNotMatch(board.body, /action="\/host\/lock"/);
   assert.doesNotMatch(board.body, /Lock this episode/);
 });
@@ -2814,6 +2824,9 @@ test("GET / after lock keeps Episode N is locked the first read so Open N+1 and 
   assert.doesNotMatch(studio, /data-guest-prize/);
   assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.match(studio, /class="studio studio-locked"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
   assert.match(body, /data-lock-409/);
   assert.equal(countExact(studio, "data-lock-409"), 1);
   assert.doesNotMatch(body, /data-lock-409-first/);
@@ -2932,6 +2945,8 @@ test("GET / after lock still fail-closes checkout 409 — vetoed rows stay visib
   assert.doesNotMatch(studio, /data-guest-prize/);
   assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.match(studio, /class="studio studio-locked"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
   assert.doesNotMatch(studio, /data-lock-409-first/);
   assert.doesNotMatch(studio, /data-lock-409-six/);
   assert.doesNotMatch(studio, /data-lock-409-after/);
@@ -3061,9 +3076,9 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.doesNotMatch(body, /No open episode yet/);
   assert.doesNotMatch(body, /No seat for sale/);
   assert.doesNotMatch(body, /Skip the host desk/);
-  assert.doesNotMatch(body, /data-host-open/);
-  assert.doesNotMatch(body, /data-host-lock/);
   const studio = studioMarkup(body);
+  assert.doesNotMatch(studio, /data-host-open/);
+  assert.doesNotMatch(studio, /data-host-lock/);
   assert.doesNotMatch(studio, / data-open-next/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 0);
@@ -3078,8 +3093,11 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.equal(countExact(studio, "open-after-lock-five"), 0);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
-  assert.equal(countExact(studio, "data-empty-honest"), 2);
+  assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-later-fact"), 0);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
+  assert.doesNotMatch(studio, /studio-locked/);
   assert.doesNotMatch(studio, /data-claim-locked/);
   assert.doesNotMatch(studio, /Episode 13 is locked/);
   assert.equal(countExact(studio, "data-lock-after-open"), 0);
@@ -3152,10 +3170,12 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.doesNotMatch(body, /data-waiting-on-host/);
   assert.doesNotMatch(body, /No open episode yet/);
   assert.doesNotMatch(body, /No seat for sale/);
-  assert.doesNotMatch(body, /data-host-open/);
-  assert.doesNotMatch(body, /data-host-lock/);
   const studio = studioMarkup(body);
-  assert.equal(countExact(studio, "data-empty-honest"), 2);
+  assert.doesNotMatch(studio, /data-host-open/);
+  assert.doesNotMatch(studio, /data-host-lock/);
+  assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
   assert.doesNotMatch(studio, /data-guest-prize/);
   assert.doesNotMatch(studio, /data-later-fact/);
   assert.doesNotMatch(studio, /data-rundown/);
@@ -3209,6 +3229,7 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.equal(response.statusCode, 200);
   const body = response.body;
   const studio = studioMarkup(body);
+  const shellAt = studio.indexOf('class="studio studio-open-empty"');
   const claimAt = studio.indexOf('id="claim"');
   const honestAt = studio.indexOf("data-empty-honest");
   const openSeatAt = studio.indexOf("data-open-seat");
@@ -3225,7 +3246,8 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.notEqual(takesAt, -1);
   assert.notEqual(ticketAt, -1);
   assert.notEqual(outbidAt, -1);
-  assert.ok(honestAt > claimAt);
+  assert.ok(shellAt < claimAt);
+  assert.ok(honestAt < claimAt);
   assert.ok(takesAt > claimAt);
   assert.ok(outbidAt > claimAt);
   assert.equal(lockCertainAt, -1);
@@ -3242,7 +3264,9 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.match(body, /value="5"/);
   assert.match(body, />Outbid<\/button>/);
   assert.match(body, /data-episode-open="true"/);
-  assert.equal(countExact(studio, "data-empty-honest"), 2);
+  assert.match(studio, /class="studio studio-open-empty"/);
+  assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-lock-certain"), 0);
   assert.equal(countExact(studio, "data-lock-409"), 0);
   assert.equal(countExact(studio, "data-claim-locked"), 0);
@@ -3262,12 +3286,19 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.doesNotMatch(studio, /data-host-open/);
   assert.doesNotMatch(studio, /data-host-lock/);
   assert.doesNotMatch(studio, / data-next-seat/);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
+  assert.doesNotMatch(studio, /studio-locked/);
   assert.doesNotMatch(body, /name="bidUsd"[^>]*disabled/);
   assert.doesNotMatch(body, /class="outbid" disabled/);
   assert.doesNotMatch(body, /featured guest/i);
   const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
   assert.match(studioCss, /\.claim\[data-empty-honest\]/);
   assert.match(studioCss, /\.empty\[data-empty-honest\] \.empty-lead/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-guest-prize\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-later-fact\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-lock-certain\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-lock-409\]/);
+  assert.match(studioCss, /\.studio\.studio-open-occupied \.empty\.open-seat/);
   assert.match(studioCss, /\.claim\[data-lock-certain\]/);
   assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
 
@@ -3280,6 +3311,86 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
     },
     payload:
       "episodeId=ep_open_honest&name=First%20Guest&siteUrl=https%3A%2F%2Ffirst.example%2F&oneLiner=First%20bid%20on%20a%20live%20seat.&bidUsd=5",
+  });
+  assert.equal(checkout.statusCode, 303);
+  assert.match(String(checkout.headers.location ?? ""), /\/checkout\/complete\?checkoutId=/);
+  assert.doesNotMatch(checkout.body, /episode_locked/);
+});
+
+test("GET / on a fresh-open empty episode isolates $5 from lock / prize leak", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_open_isolate",
+    showId: "show_english",
+    label: "Episode 1",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const studio = studioMarkup(body);
+  const shellAt = studio.indexOf('class="studio studio-open-empty"');
+  const honestAt = studio.indexOf("data-empty-honest");
+  const claimAt = studio.indexOf('id="claim"');
+  const takesAt = studio.indexOf("$5 takes #1");
+  const outbidAt = studio.indexOf(">Outbid</button>");
+  assert.notEqual(shellAt, -1);
+  assert.notEqual(honestAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(takesAt, -1);
+  assert.notEqual(outbidAt, -1);
+  assert.ok(shellAt < claimAt);
+  assert.ok(shellAt < honestAt);
+  assert.ok(takesAt > claimAt);
+  assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, /\$5 takes #1/);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /data-open-seat/);
+  assert.match(body, /value="5"/);
+  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, /action="\/checkout"/);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
+  assert.doesNotMatch(studio, /studio-locked/);
+  assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-fact/);
+  assert.doesNotMatch(studio, /data-claim-locked/);
+  assert.doesNotMatch(studio, /data-lock-certain/);
+  assert.doesNotMatch(studio, /data-lock-409/);
+  assert.doesNotMatch(studio, /data-lock-after-open/);
+  assert.doesNotMatch(studio, /data-host-lock/);
+  assert.doesNotMatch(studio, /data-rundown/);
+  assert.doesNotMatch(studio, /Episode 1 is locked/);
+  assert.doesNotMatch(studio, /This episode is locked/);
+  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-guest-prize\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-later-fact\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-lock-certain\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-lock-409\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-claim-locked\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-host-lock\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \.rundown/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \.guest/);
+  assert.match(studioCss, /\.studio\.studio-open-occupied \.empty\.open-seat/);
+  assert.match(studioCss, /\.studio\.studio-locked \.empty\.open-seat/);
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \.empty\.open-seat\[data-empty-honest\]/);
+  assert.doesNotMatch(studio, /empty-honest-first/);
+  assert.doesNotMatch(studio, /empty-honest-six/);
+  assert.doesNotMatch(studio, /lock-after-open-six/);
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_open_isolate&name=First%20Guest&siteUrl=https%3A%2F%2Ffirst.example%2F&oneLiner=First%20bid%20on%20a%20live%20seat.&bidUsd=5",
   });
   assert.equal(checkout.statusCode, 303);
   assert.match(String(checkout.headers.location ?? ""), /\/checkout\/complete\?checkoutId=/);
@@ -3449,6 +3560,8 @@ test("GET / on a live ranked seat reads the guest label first and larger than $b
   assert.doesNotMatch(studio, /data-lock-certain/);
   assert.doesNotMatch(studio, /data-lock-409/);
   assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.match(studio, /class="studio studio-open-occupied"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
   assert.doesNotMatch(body, /downloads/i);
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
@@ -3558,6 +3671,8 @@ test("GET / on an occupied live seat keeps $bid a later fact beside the guest la
   assert.doesNotMatch(studio, /data-lock-certain/);
   assert.doesNotMatch(studio, /data-lock-409/);
   assert.doesNotMatch(studio, /data-empty-honest/);
+  assert.match(studio, /class="studio studio-open-occupied"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
   assert.doesNotMatch(studio, /data-later-fact-first/);
   assert.doesNotMatch(studio, /data-later-fact-six/);
   assert.doesNotMatch(studio, /lock-after-open-six/);
@@ -3640,6 +3755,8 @@ test("GET / on an occupied open episode makes locking the episode the host actio
   assert.match(body, /Already on this episode\?/);
   assert.match(body, />Outbid<\/button>/);
   const studio = studioMarkup(body);
+  assert.match(studio, /class="studio studio-open-occupied"/);
+  assert.doesNotMatch(studio, /studio-open-empty/);
   assert.doesNotMatch(studio, /data-host-open/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 0);
@@ -3746,7 +3863,7 @@ test("POST /host/lock from the desk locks the occupied episode so Polar cannot c
   assert.doesNotMatch(board.body, /class="outbid"/);
   assert.doesNotMatch(board.body, /name="bidUsd"/);
   assert.doesNotMatch(board.body, /action="\/checkout"/);
-  assert.doesNotMatch(board.body, /data-host-lock/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-host-lock/);
   assert.doesNotMatch(board.body, /action="\/host\/lock"/);
   assert.doesNotMatch(board.body, /data-claim-live/);
   assert.doesNotMatch(board.body, /data-open-seat/);
