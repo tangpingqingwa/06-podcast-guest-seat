@@ -534,6 +534,12 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   assert.match(body, /Unpaid checkout does not rank/);
   assert.match(body, /Booked Co/);
   assert.match(body, /Highest remaining eligible bid/);
+  assert.doesNotMatch(studio, /data-guest-prize/);
+  const lockedTitleAt = studio.indexOf("Episode 12 is locked");
+  const bookedAt = studio.indexOf("Booked Co");
+  assert.notEqual(lockedTitleAt, -1);
+  assert.notEqual(bookedAt, -1);
+  assert.ok(lockedTitleAt < bookedAt);
   assert.match(body, /Guests skip this/);
   assert.match(body, /Open Episode 13/);
   assert.doesNotMatch(body, /Claim the guest seat for/);
@@ -2796,6 +2802,8 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.doesNotMatch(body, /data-host-open/);
   assert.doesNotMatch(body, /data-host-lock/);
   const studio = studioMarkup(body);
+  assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-rundown/);
   assert.doesNotMatch(studio, /data-guest-skip/);
   assert.equal(countExact(studio, "data-open-after-lock"), 0);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 0);
@@ -2895,6 +2903,99 @@ test("studio rundown is a guest card, not a table: name, one-liner, site, bid, v
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   assert.doesNotMatch(body, /utm_source/);
+});
+
+test("GET / on a live ranked seat reads the guest label first and larger than $bid + clicks", async () => {
+  const db = memoryDb();
+  const episode = createEpisode(db, {
+    id: "ep_prize",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: episode.id,
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+    clicks: 3,
+  });
+  insertListing(db, {
+    id: "lst_hold",
+    episodeId: episode.id,
+    name: "Hold Co",
+    siteUrl: "https://hold.example/",
+    oneLiner: "Still listed below #1.",
+    bidUsd: 8,
+    firstBidAt: "2026-08-22T01:10:00.000Z",
+    paidAt: "2026-08-22T01:10:05.000Z",
+    clicks: 2,
+  });
+  insertListing(db, {
+    id: "lst_veto",
+    episodeId: episode.id,
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    clicks: 1,
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const studio = studioMarkup(body);
+  const adaStart = studio.indexOf('data-listing-id="lst_ada"');
+  const holdStart = studio.indexOf('data-listing-id="lst_hold"');
+  const vetoStart = studio.indexOf('data-listing-id="lst_veto"');
+  const rundownAt = studio.indexOf("data-rundown");
+  assert.notEqual(adaStart, -1);
+  assert.notEqual(holdStart, -1);
+  assert.notEqual(vetoStart, -1);
+  assert.notEqual(rundownAt, -1);
+  const adaCard = studio.slice(adaStart, holdStart);
+  const holdCard = studio.slice(holdStart, vetoStart);
+  const vetoCard = studio.slice(vetoStart);
+  const nameAt = adaCard.indexOf("Ada Lovelace");
+  const bidAt = adaCard.indexOf("$12");
+  const clicksAt = adaCard.indexOf("3 clicks");
+  assert.ok(rundownAt < adaStart);
+  assert.ok(nameAt !== -1 && bidAt !== -1 && clicksAt !== -1);
+  assert.ok(nameAt < bidAt);
+  assert.ok(nameAt < clicksAt);
+  assert.match(adaCard, /data-guest-prize/);
+  assert.match(adaCard, /class="guest-name"/);
+  assert.match(holdCard, /data-guest-prize/);
+  assert.match(holdCard, /Hold Co/);
+  assert.match(holdCard, /class="guest-name"/);
+  assert.match(vetoCard, /data-vetoed="true"/);
+  assert.doesNotMatch(vetoCard, /data-guest-prize/);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /Claim the guest seat for/);
+  assert.match(body, /Hard Sell Co/);
+  assert.match(body, /Vetoed: hard sell/);
+  assert.match(body, /data-listing-id="lst_veto"[^>]*data-vetoed="true"/);
+  assert.equal(countExact(studio, "data-guest-prize"), 2);
+  assert.doesNotMatch(body, /downloads/i);
+  assert.doesNotMatch(body, /featured guest/i);
+  assert.doesNotMatch(body, /play count/i);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, /This episode is locked/);
+  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.guest-name/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.bid/);
+  assert.match(studioCss, /\.guest\[data-guest-prize\] \.clicks/);
 });
 
 test("GET / on an occupied open episode makes locking the episode the host action", async () => {
