@@ -295,11 +295,30 @@ function renderClaim(input: {
   const openSeat = openEmpty ? " data-open-seat" : "";
   const honest = openEmpty ? " data-empty-honest" : "";
   const nextMark = nextSeat ? " data-next-seat" : "";
-  const title = nextSeat
-    ? `Claim ${label} for`
+  const emptyClaimFirst = openEmpty;
+  const title = emptyClaimFirst
+    ? "Claim #1 for"
     : `Claim the ${escapeHtml(seat)} for`;
-  return `<section class="claim" id="claim"${live}${openSeat}${honest}${nextMark}>
-  <h1 class="claim-title">
+  const identityFields = `<div class="fields">
+      <input name="name" required maxlength="80" placeholder="Name or company"${disabled}/>
+      <input name="siteUrl" type="url" required placeholder="https://your-site"${disabled}/>
+      <input class="span-2" name="oneLiner" required maxlength="140" placeholder="One-liner for the host"${disabled}/>
+    </div>`;
+  const bidForm = emptyClaimFirst
+    ? `<button type="submit" class="outbid"${disabled}>Outbid</button>
+    <div class="listing-identity" data-listing-identity data-later-write>
+      <p class="later-write-label">Then the guest site</p>
+      ${identityFields}
+    </div>`
+    : `${identityFields}
+    <button type="submit" class="outbid"${disabled}>Outbid</button>`;
+  const claimClass = emptyClaimFirst ? "claim empty-claim-first" : "claim";
+  const emptyClaimMarks = emptyClaimFirst
+    ? ' data-empty-claim-first aria-label="Claim #1"'
+    : "";
+  const titleMarks = emptyClaimFirst ? ' data-empty-claim data-first-click="claim"' : "";
+  return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
+  <h1 class="claim-title"${titleMarks}>
     <span>${title}</span>
     <span class="bid-stepper">
       <button type="button" class="step" data-bid-step="-1" aria-label="Decrease bid by one dollar"${disabled}>−</button>
@@ -313,12 +332,7 @@ function renderClaim(input: {
   <p class="claim-note">${note}</p>
   <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
     ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
-    <div class="fields">
-      <input name="name" required maxlength="80" placeholder="Name or company"${disabled}/>
-      <input name="siteUrl" type="url" required placeholder="https://your-site"${disabled}/>
-      <input class="span-2" name="oneLiner" required maxlength="140" placeholder="One-liner for the host"${disabled}/>
-    </div>
-    <button type="submit" class="outbid"${disabled}>Outbid</button>
+    ${bidForm}
   </form>
   <p class="form-hint">${hint}</p>
 </section>`;

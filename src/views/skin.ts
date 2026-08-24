@@ -160,6 +160,32 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .claim[data-empty-honest] .claim-title {
   letter-spacing: -0.03em;
 }
+/* Empty open: guest site is a later write after Claim #1 / Outbid. */
+.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .listing-identity[data-later-write] {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line);
+}
+.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .later-write-label {
+  margin: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .listing-identity[data-later-write] .fields input {
+  height: 2.2rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first]:not([data-next-seat]) .outbid {
+  justify-self: center;
+}
 .empty[data-empty-honest] .empty-lead {
   letter-spacing: -0.03em;
 }

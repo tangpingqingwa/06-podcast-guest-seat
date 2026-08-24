@@ -167,6 +167,27 @@ if [[ -f package.json ]]; then
   echo "== product UI (studio rundown) source =="
   [[ -f src/views/skin.ts ]] || fail "missing src/views/skin.ts"
   grep -q 'Claim the' src/http/routes/pages.ts || fail "board missing claim chrome"
+  grep -q 'Claim #1 for' src/http/routes/pages.ts || fail "empty-open claim missing Claim #1"
+  grep -q 'data-first-click="claim"' src/http/routes/pages.ts \
+    || fail "empty-open Claim #1 missing first-click mark"
+  grep -q 'data-empty-claim-first' src/http/routes/pages.ts \
+    || fail "empty-open claim missing empty-claim-first stamp"
+  grep -q 'empty-claim-first' src/http/routes/pages.ts \
+    || fail "empty-open claim missing empty-claim-first class"
+  grep -q 'data-later-write' src/http/routes/pages.ts \
+    || fail "empty-open guest site missing later-write stamp"
+  grep -q 'data-listing-identity' src/http/routes/pages.ts \
+    || fail "empty-open guest site missing listing-identity wrap"
+  grep -q 'Then the guest site' src/http/routes/pages.ts \
+    || fail "empty-open must name the guest site as a later write"
+  grep -q 'listing-identity\[data-later-write\]' src/views/skin.ts \
+    || fail "empty-open CSS missing later-write guest-site composition"
+  grep -q 'Empty open: guest site is a later write' src/views/skin.ts \
+    || fail "empty-open CSS must document guest site as a later write after Claim #1"
+  if grep -nE 'data-empty-claim-after|data-claim-after-empty|empty-claim-after-[0-9]|lock-after-open-six' \
+    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
+    fail "do not stamp another named hop; compose empty Claim #1 then the guest site"
+  fi
   grep -q 'bid-stepper' src/http/routes/pages.ts || fail "board missing ± bid stepper"
   grep -q 'bid-field' src/http/routes/pages.ts || fail "board missing dashed \$amount"
   grep -q 'Outbid' src/http/routes/pages.ts || fail "board missing Outbid"
@@ -484,6 +505,8 @@ if [[ -f package.json ]]; then
     || fail "fresh-open empty-open isolation test did not run"
   grep -q 'GET / on a fresh-open empty episode keeps \$5 honest' "$test_log" \
     || fail "fresh-open empty-open guest-one-first leak isolation test did not run"
+  grep -q 'GET / on a fresh-open empty episode has one first click' "$test_log" \
+    || fail "empty-open Claim #1 then guest-site later-write test did not run"
   grep -q 'studio rundown is a guest card' "$test_log" \
     || fail "studio guest-card test did not run"
   grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
