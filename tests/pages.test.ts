@@ -213,10 +213,12 @@ test("GET / with no episode shows a first-time host desk to open the next seat",
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 0);
   assert.equal(countExact(studio, "lock-after-open-first"), 0);
   assert.equal(countExact(studio, "lock-after-open-two"), 0);
   assert.equal(countExact(studio, "lock-after-open-three"), 0);
   assert.equal(countExact(studio, "lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "lock-after-open-five"), 0);
   assert.match(body, /name="session"/);
   assert.match(body, /name="seatKind" value="guest_seat"/);
   assert.match(body, /name="label"[^>]*value="Episode 1"/);
@@ -267,10 +269,12 @@ test("GET / with no episode tells first-time guests to skip the host desk", asyn
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 0);
   assert.equal(countExact(studio, "lock-after-open-first"), 0);
   assert.equal(countExact(studio, "lock-after-open-two"), 0);
   assert.equal(countExact(studio, "lock-after-open-three"), 0);
   assert.equal(countExact(studio, "lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "lock-after-open-five"), 0);
   assert.doesNotMatch(body, /class="open-next outbid"/);
   assert.doesNotMatch(body, /name="episodeId"/);
   assert.doesNotMatch(body, /Already on this episode\?/);
@@ -388,12 +392,13 @@ test("GET / after lock keeps the host desk so the next empty episode can open", 
   assert.match(board.body, /data-open-after-lock-four/);
   assert.match(board.body, /data-open-after-lock-five/);
   assert.match(board.body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(board.body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(board.body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(board.body, /data-lock-after-open-first/);
   assert.match(board.body, /data-lock-after-open-two/);
   assert.match(board.body, /data-lock-after-open-three/);
   assert.match(board.body, /data-lock-after-open-four/);
-  assert.match(board.body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(board.body, /data-lock-after-open-five/);
+  assert.match(board.body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(board.body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(board.body, /Episode 12 stays booked/);
   assert.match(board.body, /prior bids do not carry/);
@@ -456,6 +461,7 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const rundownAt = studio.indexOf("data-rundown");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(claimAt, -1);
@@ -473,6 +479,7 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(rundownAt, -1);
   assert.ok(ticketAt < claimAt);
   assert.ok(claimAt < deskAt);
@@ -486,6 +493,7 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock-first"), 1);
   assert.equal(countExact(studio, "data-open-after-lock-two"), 1);
@@ -501,20 +509,23 @@ test("GET / after lock makes the locked episode certain for a first-time guest",
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
   assert.doesNotMatch(body, /href="#claim"/);
   assert.match(body, /data-episode-open="false"/);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -582,6 +593,7 @@ test("GET / after lock makes opening the next empty episode the host action, not
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const openBtnAt = studio.indexOf('class="open-next"');
   const outbidAt = studio.indexOf("Outbid");
   assert.notEqual(deskAt, -1);
@@ -598,6 +610,7 @@ test("GET / after lock makes opening the next empty episode the host action, not
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(openBtnAt, -1);
   assert.ok(claimAt < deskAt);
   assert.ok(lockedAt < afterLockAt);
@@ -610,6 +623,7 @@ test("GET / after lock makes opening the next empty episode the host action, not
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(openBtnAt < outbidAt || outbidAt === -1);
   assert.match(body, /Next episode/);
   assert.match(body, /Open Episode 13/);
@@ -667,6 +681,7 @@ test("GET / after lock makes the host desk the certain next host action", async 
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const rundownAt = studio.indexOf("data-rundown");
   const openFormAt = studio.indexOf('action="/host/open"');
   assert.notEqual(ticketAt, -1);
@@ -684,6 +699,7 @@ test("GET / after lock makes the host desk the certain next host action", async 
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(rundownAt, -1);
   assert.notEqual(openFormAt, -1);
   assert.ok(ticketAt < claimAt);
@@ -698,6 +714,7 @@ test("GET / after lock makes the host desk the certain next host action", async 
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(claimAt < openFormAt);
   assert.ok(deskAt < rundownAt);
   assert.match(body, /data-open-after-lock(?!-(?:first|two|three|four|five))/);
@@ -707,12 +724,13 @@ test("GET / after lock makes the host desk the certain next host action", async 
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -737,10 +755,12 @@ test("GET / after lock makes the host desk the certain next host action", async 
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -814,6 +834,7 @@ test("GET / after lock concentrates the locked episode after the host desk moved
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -832,6 +853,7 @@ test("GET / after lock concentrates the locked episode after the host desk moved
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -853,14 +875,16 @@ test("GET / after lock concentrates the locked episode after the host desk moved
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(deskAt < rundownAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -876,15 +900,17 @@ test("GET / after lock concentrates the locked episode after the host desk moved
   assert.match(body, /data-open-after-lock-first/);
   assert.match(body, /data-open-after-lock-two/);
   assert.match(body, /Guests skip this/);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock"), 6);
@@ -974,6 +1000,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -993,6 +1020,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1015,6 +1043,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(afterLockFirstAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockFirstAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
@@ -1025,7 +1054,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -1049,15 +1078,17 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.equal(countExact(studio, "open-after-lock-three"), 2);
   assert.equal(countExact(studio, "open-after-lock-four"), 2);
   assert.equal(countExact(studio, "open-after-lock-five"), 2);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -1133,6 +1164,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is concent
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1152,6 +1184,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is concent
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1174,15 +1207,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is concent
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(lockAfterFirstAt < rundownAt);
   assert.ok(claimAt === lockAfterAt || claimAt < lockAfterFirstAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -1203,15 +1238,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is concent
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
   assert.match(body, /Guests skip this/);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, "data-host-open"), 1);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock"), 6);
@@ -1301,6 +1338,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1320,6 +1358,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1342,6 +1381,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(afterLockTwoAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockTwoAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
@@ -1352,7 +1392,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -1376,15 +1416,17 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.equal(countExact(studio, "open-after-lock-three"), 2);
   assert.equal(countExact(studio, "open-after-lock-four"), 2);
   assert.equal(countExact(studio, "open-after-lock-five"), 2);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -1460,6 +1502,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1479,6 +1522,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1501,15 +1545,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(lockAfterTwoAt < rundownAt);
   assert.ok(claimAt === lockAfterAt || claimAt < lockAfterTwoAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -1530,15 +1576,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
   assert.match(body, /Guests skip this/);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, "data-host-open"), 1);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock"), 6);
@@ -1628,6 +1676,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1647,6 +1696,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1668,6 +1718,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(afterLockTwoAt < afterLockThreeAt);
   assert.ok(afterLockThreeAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockThreeAt);
@@ -1679,7 +1730,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -1703,15 +1754,17 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.equal(countExact(studio, "open-after-lock-three"), 2);
   assert.equal(countExact(studio, "open-after-lock-four"), 2);
   assert.equal(countExact(studio, "open-after-lock-five"), 2);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -1787,6 +1840,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is louder"
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1806,6 +1860,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is louder"
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1828,15 +1883,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is louder"
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(lockAfterThreeAt < rundownAt);
   assert.ok(claimAt === lockAfterAt || claimAt < lockAfterThreeAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -1857,15 +1914,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is louder"
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
   assert.match(body, /Guests skip this/);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, "data-host-open"), 1);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock"), 6);
@@ -1955,6 +2014,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -1974,6 +2034,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -1994,6 +2055,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(afterLockThreeAt < afterLockFourAt);
   assert.ok(afterLockFourAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockFourAt);
@@ -2005,7 +2067,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -2029,15 +2091,17 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.equal(countExact(studio, "open-after-lock-three"), 2);
   assert.equal(countExact(studio, "open-after-lock-four"), 2);
   assert.equal(countExact(studio, "open-after-lock-five"), 2);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -2113,6 +2177,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -2132,6 +2197,7 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -2154,15 +2220,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.ok(lockAfterThreeAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(lockAfterFourAt < rundownAt);
   assert.ok(claimAt === lockAfterAt || claimAt < lockAfterFourAt);
   assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
-  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four))/);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
   assert.match(body, /data-lock-after-open-first/);
   assert.match(body, /data-lock-after-open-two/);
   assert.match(body, /data-lock-after-open-three/);
   assert.match(body, /data-lock-after-open-four/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Episode 12 is locked/);
   assert.match(body, /This episode is locked/);
   assert.match(body, /Polar cannot charge/);
@@ -2183,15 +2251,17 @@ test("GET / after lock concentrates the locked episode after Open N+1 is re-conc
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
   assert.match(body, /Guests skip this/);
   assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, "data-host-open"), 1);
   assert.equal(countExact(studio, "data-open-next"), 1);
   assert.equal(countExact(studio, "data-open-after-lock"), 6);
@@ -2281,6 +2351,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
   const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
   const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
   const deskAt = studio.indexOf("data-host-open");
   const afterLockAt = studio.indexOf("data-open-after-lock");
   const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
@@ -2300,6 +2371,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.notEqual(lockAfterTwoAt, -1);
   assert.notEqual(lockAfterThreeAt, -1);
   assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
   assert.notEqual(deskAt, -1);
   assert.notEqual(afterLockAt, -1);
   assert.notEqual(afterLockFirstAt, -1);
@@ -2319,6 +2391,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.ok(lockAfterThreeAt < afterLockThreeAt);
   assert.ok(lockAfterFourAt < afterLockFourAt);
   assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
   assert.ok(afterLockFourAt < afterLockFiveAt);
   assert.ok(afterLockFiveAt < rundownAt);
   assert.ok(deskAt === afterLockAt || deskAt < afterLockFiveAt);
@@ -2330,7 +2403,7 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.match(body, /data-open-after-lock-four/);
   assert.match(body, /data-open-after-lock-five/);
   assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
-  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four"/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
   assert.match(body, /Open Episode 13/);
   assert.match(body, /Episode 12 is locked\. Open Episode 13 empty\./);
   assert.match(body, /Polar cannot charge on N\+1 until you open it/);
@@ -2354,15 +2427,17 @@ test("GET / after lock concentrates opening the next empty episode after the loc
   assert.equal(countExact(studio, "open-after-lock-three"), 2);
   assert.equal(countExact(studio, "open-after-lock-four"), 2);
   assert.equal(countExact(studio, "open-after-lock-five"), 2);
-  assert.equal(countExact(studio, "data-lock-after-open"), 5);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
   assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
   assert.equal(countExact(studio, "lock-after-open-first"), 2);
   assert.equal(countExact(studio, "lock-after-open-two"), 2);
   assert.equal(countExact(studio, "lock-after-open-three"), 2);
   assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
   assert.equal(countExact(studio, 'class="open-next"'), 1);
   assert.equal(countExact(studio, 'action="/host/open"'), 1);
   assert.doesNotMatch(body, /href="#host-open-form"/);
@@ -2386,6 +2461,180 @@ test("GET / after lock concentrates opening the next empty episode after the loc
     },
     payload:
       "episodeId=ep_open_after_lock_five&name=Late%20Co&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Should%20not%20bid.&bidUsd=20",
+  });
+  assert.equal(checkout.statusCode, 409);
+  assert.match(checkout.body, /episode_locked/);
+  assert.match(checkout.body, /Polar did not charge/);
+});
+
+test("GET / after lock concentrates the locked episode after Open N+1 is re-concentrated again, once more", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_lock_after_open_five",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    lockedAt: "2026-08-22T12:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_lock_five",
+    episodeId: "ep_lock_after_open_five",
+    name: "Booked Co",
+    siteUrl: "https://booked.example/",
+    oneLiner: "Highest remaining eligible bid.",
+    bidUsd: 9,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  insertListing(db, {
+    id: "lst_lock_five_veto",
+    episodeId: "ep_lock_after_open_five",
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    vetoedAt: "2026-08-22T02:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const board = await app.inject({ method: "GET", url: "/" });
+  assert.equal(board.statusCode, 200);
+  const body = board.body;
+  const studio = studioMarkup(body);
+  const ticketAt = studio.indexOf("data-show-ticket");
+  const claimAt = studio.indexOf('id="claim"');
+  const lockedAt = studio.indexOf("data-claim-locked");
+  const lockAfterAt = studio.indexOf("data-lock-after-open");
+  const lockAfterFirstAt = studio.indexOf("data-lock-after-open-first");
+  const lockAfterTwoAt = studio.indexOf("data-lock-after-open-two");
+  const lockAfterThreeAt = studio.indexOf("data-lock-after-open-three");
+  const lockAfterFourAt = studio.indexOf("data-lock-after-open-four");
+  const lockAfterFiveAt = studio.indexOf("data-lock-after-open-five");
+  const deskAt = studio.indexOf("data-host-open");
+  const afterLockAt = studio.indexOf("data-open-after-lock");
+  const afterLockFirstAt = studio.indexOf("data-open-after-lock-first");
+  const afterLockTwoAt = studio.indexOf("data-open-after-lock-two");
+  const afterLockThreeAt = studio.indexOf("data-open-after-lock-three");
+  const afterLockFourAt = studio.indexOf("data-open-after-lock-four");
+  const afterLockFiveAt = studio.indexOf("data-open-after-lock-five");
+  const openBtnAt = studio.indexOf('class="open-next"');
+  const openFormAt = studio.indexOf('action="/host/open"');
+  const rundownAt = studio.indexOf("data-rundown");
+  const vetoAt = studio.indexOf("Hard Sell Co");
+  assert.notEqual(ticketAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(lockedAt, -1);
+  assert.notEqual(lockAfterAt, -1);
+  assert.notEqual(lockAfterFirstAt, -1);
+  assert.notEqual(lockAfterTwoAt, -1);
+  assert.notEqual(lockAfterThreeAt, -1);
+  assert.notEqual(lockAfterFourAt, -1);
+  assert.notEqual(lockAfterFiveAt, -1);
+  assert.notEqual(deskAt, -1);
+  assert.notEqual(afterLockAt, -1);
+  assert.notEqual(afterLockFirstAt, -1);
+  assert.notEqual(afterLockTwoAt, -1);
+  assert.notEqual(afterLockThreeAt, -1);
+  assert.notEqual(afterLockFourAt, -1);
+  assert.notEqual(afterLockFiveAt, -1);
+  assert.notEqual(openBtnAt, -1);
+  assert.notEqual(openFormAt, -1);
+  assert.notEqual(rundownAt, -1);
+  assert.ok(ticketAt < claimAt);
+  assert.ok(claimAt < deskAt);
+  assert.ok(lockedAt < afterLockAt);
+  assert.ok(lockAfterAt < deskAt);
+  assert.ok(lockAfterFirstAt < afterLockFirstAt);
+  assert.ok(lockAfterFirstAt < afterLockTwoAt);
+  assert.ok(lockAfterTwoAt < afterLockTwoAt);
+  assert.ok(lockAfterTwoAt < afterLockThreeAt);
+  assert.ok(lockAfterThreeAt < afterLockThreeAt);
+  assert.ok(lockAfterThreeAt < afterLockFourAt);
+  assert.ok(lockAfterFourAt < afterLockFourAt);
+  assert.ok(lockAfterFourAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < afterLockFiveAt);
+  assert.ok(lockAfterFiveAt < rundownAt);
+  assert.ok(claimAt === lockAfterAt || claimAt < lockAfterFiveAt);
+  assert.ok(vetoAt !== -1 && rundownAt < vetoAt);
+  assert.match(body, /data-lock-after-open(?!-(?:first|two|three|four|five))/);
+  assert.match(body, /data-lock-after-open-first/);
+  assert.match(body, /data-lock-after-open-two/);
+  assert.match(body, /data-lock-after-open-three/);
+  assert.match(body, /data-lock-after-open-four/);
+  assert.match(body, /data-lock-after-open-five/);
+  assert.match(body, /class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five"/);
+  assert.match(body, /Episode 12 is locked/);
+  assert.match(body, /This episode is locked/);
+  assert.match(body, /Polar cannot charge/);
+  assert.match(body, /The next episode opens empty/);
+  assert.match(body, /Prior bids do not carry/);
+  assert.match(body, /Unpaid checkout does not rank/);
+  assert.match(body, /Booked Co/);
+  assert.match(body, /Hard Sell Co/);
+  assert.match(body, /Vetoed: hard sell/);
+  assert.match(body, /data-listing-id="lst_lock_five_veto"[^>]*data-vetoed="true"/);
+  assert.match(body, /Open Episode 13/);
+  assert.match(body, /data-open-after-lock(?!-(?:first|two|three|four|five))/);
+  assert.match(body, /data-open-after-lock-first/);
+  assert.match(body, /data-open-after-lock-two/);
+  assert.match(body, /data-open-after-lock-three/);
+  assert.match(body, /data-open-after-lock-four/);
+  assert.match(body, /data-open-after-lock-five/);
+  assert.match(body, /class="host-open open-after-lock-first open-after-lock-two open-after-lock-three open-after-lock-four open-after-lock-five"/);
+  assert.match(body, /Guests skip this/);
+  assert.equal(countExact(studio, "data-claim-locked"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open"), 6);
+  assert.equal(countExact(studio, "data-lock-after-open-first"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-two"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-three"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-four"), 1);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 1);
+  assert.equal(countExact(studio, "lock-after-open-first"), 2);
+  assert.equal(countExact(studio, "lock-after-open-two"), 2);
+  assert.equal(countExact(studio, "lock-after-open-three"), 2);
+  assert.equal(countExact(studio, "lock-after-open-four"), 2);
+  assert.equal(countExact(studio, "lock-after-open-five"), 2);
+  assert.equal(countExact(studio, "data-host-open"), 1);
+  assert.equal(countExact(studio, "data-open-next"), 1);
+  assert.equal(countExact(studio, "data-open-after-lock"), 6);
+  assert.equal(countExact(studio, "data-open-after-lock-first"), 1);
+  assert.equal(countExact(studio, "data-open-after-lock-two"), 1);
+  assert.equal(countExact(studio, "data-open-after-lock-three"), 1);
+  assert.equal(countExact(studio, "data-open-after-lock-four"), 1);
+  assert.equal(countExact(studio, "data-open-after-lock-five"), 1);
+  assert.equal(countExact(studio, "open-after-lock-first"), 2);
+  assert.equal(countExact(studio, "open-after-lock-two"), 2);
+  assert.equal(countExact(studio, "open-after-lock-three"), 2);
+  assert.equal(countExact(studio, "open-after-lock-four"), 2);
+  assert.equal(countExact(studio, "open-after-lock-five"), 2);
+  assert.equal(countExact(studio, 'class="open-next"'), 1);
+  assert.equal(countExact(studio, 'action="/host/open"'), 1);
+  assert.doesNotMatch(body, /href="#host-open-form"/);
+  assert.doesNotMatch(body, /href="#claim"/);
+  assert.doesNotMatch(body, /data-claim-live/);
+  assert.doesNotMatch(body, /data-open-seat/);
+  assert.doesNotMatch(body, / data-next-seat/);
+  assert.doesNotMatch(body, /Seat is open/);
+  assert.doesNotMatch(body, /\$5 takes #1/);
+  assert.doesNotMatch(body, /name="bidUsd"/);
+  assert.doesNotMatch(body, /class="outbid"/);
+  assert.doesNotMatch(body, /action="\/checkout"/);
+  assert.doesNotMatch(body, /Claim the guest seat for/);
+  assert.doesNotMatch(body, /featured guest/i);
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_lock_after_open_five&name=Late%20Co&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Should%20not%20bid.&bidUsd=20",
   });
   assert.equal(checkout.statusCode, 409);
   assert.match(checkout.body, /episode_locked/);
@@ -2480,10 +2729,12 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 0);
   assert.equal(countExact(studio, "lock-after-open-first"), 0);
   assert.equal(countExact(studio, "lock-after-open-two"), 0);
   assert.equal(countExact(studio, "lock-after-open-three"), 0);
   assert.equal(countExact(studio, "lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "lock-after-open-five"), 0);
   assert.doesNotMatch(body, /data-guest-skip/);
   assert.doesNotMatch(body, /Polar cannot charge on N\+1 until you open it/);
   assert.doesNotMatch(body, /This episode is locked/);
@@ -2562,10 +2813,12 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 0);
   assert.equal(countExact(studio, "lock-after-open-first"), 0);
   assert.equal(countExact(studio, "lock-after-open-two"), 0);
   assert.equal(countExact(studio, "lock-after-open-three"), 0);
   assert.equal(countExact(studio, "lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "lock-after-open-five"), 0);
   assert.doesNotMatch(body, / data-next-seat/);
   assert.doesNotMatch(body, /Claim Episode 1 for/);
   assert.doesNotMatch(body, /Already on this episode\?/);
@@ -2726,10 +2979,12 @@ test("GET / on an occupied open episode makes locking the episode the host actio
   assert.equal(countExact(studio, "data-lock-after-open-two"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-three"), 0);
   assert.equal(countExact(studio, "data-lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "data-lock-after-open-five"), 0);
   assert.equal(countExact(studio, "lock-after-open-first"), 0);
   assert.equal(countExact(studio, "lock-after-open-two"), 0);
   assert.equal(countExact(studio, "lock-after-open-three"), 0);
   assert.equal(countExact(studio, "lock-after-open-four"), 0);
+  assert.equal(countExact(studio, "lock-after-open-five"), 0);
   assert.doesNotMatch(body, /action="\/host\/open"/);
   assert.doesNotMatch(body, /Open guest seat/);
   assert.doesNotMatch(body, /class="lock-episode outbid"/);
@@ -2802,6 +3057,7 @@ test("POST /host/lock from the desk locks the occupied episode so Polar cannot c
   assert.match(board.body, /data-lock-after-open-two/);
   assert.match(board.body, /data-lock-after-open-three/);
   assert.match(board.body, /data-lock-after-open-four/);
+  assert.match(board.body, /data-lock-after-open-five/);
   assert.doesNotMatch(board.body, /class="outbid"/);
   assert.doesNotMatch(board.body, /name="bidUsd"/);
   assert.doesNotMatch(board.body, /action="\/checkout"/);
