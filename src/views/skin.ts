@@ -167,6 +167,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-first-click="guest"],
 .studio.studio-open-empty[data-empty-honest] [data-later-seat],
 .studio.studio-open-empty[data-empty-honest] [data-later-go],
+.studio.studio-open-empty[data-empty-honest] [data-later-foot],
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
 .studio.studio-open-empty[data-empty-honest] [data-claim-locked],
 .studio.studio-open-empty[data-empty-honest] [data-lock-certain],
@@ -180,11 +181,13 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-first-click="guest"],
 .studio.studio-open-empty [data-later-seat],
 .studio.studio-open-empty [data-later-go],
+.studio.studio-open-empty [data-later-foot],
 .studio.studio-open-empty [data-later-fact],
 .studio.studio-open-empty .later-fact,
 .studio.studio-open-empty .guest.later-seat,
 .studio.studio-open-empty .later-name,
 .studio.studio-open-empty .later-go,
+.studio.studio-open-empty .later-foot,
 .studio.studio-open-empty .rundown,
 .studio.studio-open-empty .guest {
   display: none;
@@ -499,10 +502,30 @@ export const OCCUPIED_CSS = /* css */ `
   text-underline-offset: 0.14em;
 }
 .studio.studio-open-occupied .guest.later-seat[data-later-seat] {
+  grid-template-columns: 2.4rem 1fr;
+  grid-template-areas:
+    "cue person"
+    "foot foot";
+  gap: 0.35rem 0.65rem;
   padding: 0.55rem 0.75rem;
   border-left-width: 2px;
   border-left-color: var(--line);
   background: #1a1612;
+}
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .cue { grid-area: cue; }
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .person { grid-area: person; }
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] {
+  grid-area: foot;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 0.85rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
 }
 .studio.studio-open-occupied .guest.later-seat[data-later-seat] .cue-num {
   font-size: 0.88rem;
@@ -515,8 +538,10 @@ export const OCCUPIED_CSS = /* css */ `
   letter-spacing: 0;
   color: #d9ccb4;
 }
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .guest-site.later-go,
-.studio.studio-open-occupied .guest.later-seat[data-later-seat] .guest-site.later-go a[data-later-go] {
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] a.later-go[data-later-go],
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .bid,
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .clicks,
+.studio.studio-open-occupied .guest.later-seat[data-later-seat] .later-foot[data-later-foot] .when {
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--muted);
