@@ -262,11 +262,12 @@ function renderClaim(input: {
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
+  const honest = openEmpty ? " data-empty-honest" : "";
   const nextMark = nextSeat ? " data-next-seat" : "";
   const title = nextSeat
     ? `Claim ${label} for`
     : `Claim the ${escapeHtml(seat)} for`;
-  return `<section class="claim" id="claim"${live}${openSeat}${nextMark}>
+  return `<section class="claim" id="claim"${live}${openSeat}${honest}${nextMark}>
   <h1 class="claim-title">
     <span>${title}</span>
     <span class="bid-stepper">
@@ -308,7 +309,7 @@ function renderOpenEmptyRundown(episode: Episode, nextSeat = false): string {
   const body = nextSeat
     ? `No paid listings on ${label} yet. Polar can charge. Outbid claims this empty ${escapeHtml(seatLabel(episode.seatKind))}. Prior bids do not carry.`
     : `No paid listings on this episode yet. Polar can charge. Outbid claims the ${escapeHtml(seatLabel(episode.seatKind))} after payment.`;
-  return `<section class="empty open-seat" data-empty-board data-open-seat${nextSeat ? " data-next-seat" : ""}>
+  return `<section class="empty open-seat" data-empty-board data-open-seat data-empty-honest${nextSeat ? " data-next-seat" : ""}>
   <p class="empty-kicker">${kicker}</p>
   <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
   <p>${body}</p>
