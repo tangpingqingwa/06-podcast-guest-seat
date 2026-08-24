@@ -380,6 +380,17 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   min-height: 3.7rem;
   font-size: 1.25rem;
 }
+.host-open.open-after-lock-four {
+  padding: 2.55rem 1.55rem 2.45rem;
+  border-width: 7px;
+}
+.host-open.open-after-lock-four .empty-lead {
+  font-size: 1.78rem;
+}
+.host-open.open-after-lock-four .open-next {
+  min-height: 4.1rem;
+  font-size: 1.38rem;
+}
 footer { color: var(--muted); font-size: 0.85rem; }
 .doc { color: #d9ccb4; }
 .doc h1, .doc h2 { color: #f3ead8; letter-spacing: -0.03em; }
