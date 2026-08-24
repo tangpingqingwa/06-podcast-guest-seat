@@ -519,7 +519,8 @@ footer { color: var(--muted); font-size: 0.85rem; }
 .doc th { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; font-weight: 500; }
 `;
 
-/* Occupied live only: #1 guest is the first click; later seats stay quieter. Empty open must not inherit this. */
+/* Occupied live only: #1 guest is the first click; later seats stay quieter.
+   Host Lock is a later write after the rundown. Empty open must not inherit this. */
 export const OCCUPIED_CSS = /* css */ `
 .studio.studio-open-occupied .guest[data-guest-prize] {
   grid-template-columns: 3.4rem 1fr;
