@@ -168,6 +168,13 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .claim.lock-after-open-two .claim-title {
   font-size: clamp(2.1rem, 5.6vw, 2.75rem);
 }
+.claim.lock-after-open-three {
+  padding: 2.3rem 1.4rem 2.2rem;
+  border-width: 6px;
+}
+.claim.lock-after-open-three .claim-title {
+  font-size: clamp(2.35rem, 6.2vw, 3.05rem);
+}
 .claim-title {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.5rem;
   margin: 0;
