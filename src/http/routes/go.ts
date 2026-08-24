@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { canonicalizeSiteUrl, HygieneError } from "../../hygiene.js";
 import { getListing, incrementListingClicks } from "../../listings.js";
+import { isPaidListing } from "../../rank.js";
 
 export const GO_PATH = "/go/:listingId" as const;
 
@@ -9,7 +10,7 @@ export const goRoutes: FastifyPluginAsync = async (app) => {
     GO_PATH,
     async (request, reply) => {
       const listing = getListing(app.db, request.params.listingId);
-      if (!listing) {
+      if (!listing || !isPaidListing(listing)) {
         return reply.code(404).send({ error: "listing_not_found" });
       }
 

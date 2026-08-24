@@ -7,7 +7,13 @@ import {
   type Episode,
 } from "../../episodes.js";
 import { listListingsForEpisode, type Listing } from "../../listings.js";
-import { MIN_BID_USD, rankListings, type RankedListing } from "../../rank.js";
+import {
+  isPaidListing,
+  MIN_BID_USD,
+  paidListings,
+  rankListings,
+  type RankedListing,
+} from "../../rank.js";
 import { BOARD_CSS, STUDIO_CSS } from "../../views/skin.js";
 
 export const BOARD_PATH = "/" as const;
@@ -23,6 +29,7 @@ type BoardRow = {
   siteUrl: string;
   bidUsd: number;
   firstBidAt: string;
+  paidAt: string;
   clicks: number;
   vetoed: boolean;
   vetoReason: string | null;
@@ -63,7 +70,8 @@ export function displaySite(siteUrl: string): string {
 }
 
 export function boardRows(listings: readonly Listing[]): BoardRow[] {
-  const ranked = rankListings(listings);
+  const paid = paidListings(listings);
+  const ranked = rankListings(paid);
   const rankedIds = new Set(ranked.map((row) => row.id));
   const visible: BoardRow[] = ranked.map((row: RankedListing) => ({
     id: row.id,
@@ -73,12 +81,13 @@ export function boardRows(listings: readonly Listing[]): BoardRow[] {
     siteUrl: row.siteUrl,
     bidUsd: row.bidUsd,
     firstBidAt: row.firstBidAt,
+    paidAt: row.paidAt,
     clicks: row.clicks,
     vetoed: false,
     vetoReason: null,
   }));
-  const vetoed = listings
-    .filter((row) => !rankedIds.has(row.id))
+  const vetoed = paid
+    .filter((row) => !rankedIds.has(row.id) && row.vetoedAt !== null)
     .sort((a, b) => {
       if (a.firstBidAt !== b.firstBidAt) {
         return a.firstBidAt < b.firstBidAt ? -1 : 1;
@@ -93,8 +102,9 @@ export function boardRows(listings: readonly Listing[]): BoardRow[] {
       siteUrl: row.siteUrl,
       bidUsd: row.bidUsd,
       firstBidAt: row.firstBidAt,
+      paidAt: row.paidAt,
       clicks: row.clicks,
-      vetoed: row.vetoedAt !== null,
+      vetoed: true,
       vetoReason: row.vetoReason,
     }));
   return [...visible, ...vetoed];
@@ -188,13 +198,14 @@ function renderShowTicket(episode: Episode | undefined): string {
 }
 
 function renderGuestCard(row: BoardRow, now: Date, live = false): string {
+  const polarPaid = isPaidListing(row);
   const cue = row.vetoed ? "VETO" : row.rank === null ? "—" : `#${row.rank}`;
   const kind = row.vetoed ? "CUT" : row.rank === 1 ? "SEAT" : "HOLD";
-  const prize = live && row.rank === 1 && !row.vetoed;
-  const laterSeat = live && row.rank !== null && row.rank > 1 && !row.vetoed;
+  const prize = live && polarPaid && row.rank === 1 && !row.vetoed;
+  const laterSeat = live && polarPaid && row.rank !== null && row.rank > 1 && !row.vetoed;
   const klass = row.vetoed
     ? " guest vetoed"
-    : row.rank === 1
+    : prize
       ? " guest booked"
       : laterSeat
         ? " guest later-seat"
@@ -237,7 +248,8 @@ function renderGuestCard(row: BoardRow, now: Date, live = false): string {
     <p class="clicks">${row.clicks} clicks</p>
     <p class="when"><time datetime="${escapeHtml(row.firstBidAt)}">${escapeHtml(relativeTime(row.firstBidAt, now))}</time></p>
   </div>`;
-  const marks = `${prize ? " data-guest-prize" : ""}${laterSeat ? " data-later-seat" : ""}`;
+  const paidMark = polarPaid ? ` data-paid-at="${escapeHtml(row.paidAt)}"` : "";
+  const marks = `${prize ? " data-guest-prize" : ""}${laterSeat ? " data-later-seat" : ""}${paidMark}`;
   return `<article class="${klass.trim()}" data-listing-id="${escapeHtml(row.id)}" data-rank="${row.rank ?? ""}" data-vetoed="${row.vetoed ? "true" : "false"}"${marks}>
   <div class="cue">
     <span class="cue-num">${cue}</span>
@@ -458,7 +470,7 @@ export function renderBoardHtml(
   priorLocked?: Episode,
 ): string {
   const canCharge = Boolean(episode && episode.lockedAt === null);
-  const rows = episode ? boardRows(listings) : [];
+  const rows = episode ? boardRows(paidListings(listings)) : [];
   const nextSeat = Boolean(canCharge && rows.length === 0 && priorLocked);
   const rundown =
     !episode
@@ -622,7 +634,9 @@ export function renderHostLockErrorHtml(code: string): string {
 export const pageRoutes: FastifyPluginAsync = async (app) => {
   app.get(BOARD_PATH, async (_request, reply) => {
     const episode = getCurrentEpisode(app.db);
-    const listings = episode ? listListingsForEpisode(app.db, episode.id) : [];
+    const listings = episode
+      ? paidListings(listListingsForEpisode(app.db, episode.id))
+      : [];
     const priorLocked =
       episode && episode.lockedAt === null
         ? getLatestLockedEpisode(app.db, episode.id)
@@ -654,7 +668,9 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
           }),
         );
       }
-      const listings = listListingsForEpisode(app.db, episode.id);
+      const listings = paidListings(
+        listListingsForEpisode(app.db, episode.id),
+      );
       const priorLocked =
         episode.lockedAt === null
           ? getLatestLockedEpisode(app.db, episode.id)

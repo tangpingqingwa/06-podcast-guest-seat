@@ -52,12 +52,32 @@ export type ApplyPaidRaiseInput = {
   listingId?: string;
 };
 
+/** Polar (or the fixture) reported paid. Empty / epoch / unpaid never ranks. */
+export function isPaidListing(listing: Pick<RankableListing, "paidAt">): boolean {
+  const paidAt = listing.paidAt.trim();
+  if (!paidAt) {
+    return false;
+  }
+  const ms = Date.parse(paidAt);
+  if (!Number.isFinite(ms)) {
+    return false;
+  }
+  return ms > 0;
+}
+
+/** Polar-paid rows only. Unpaid or abandoned checkout never occupies the board. */
+export function paidListings<T extends Pick<RankableListing, "paidAt">>(
+  listings: readonly T[],
+): T[] {
+  return listings.filter(isPaidListing);
+}
+
 /** Paid, not vetoed, same episode when `episodeId` is passed. */
 export function isEligible(
   listing: RankableListing,
   episodeId?: string,
 ): boolean {
-  if (!listing.paidAt.trim()) {
+  if (!isPaidListing(listing)) {
     return false;
   }
   if (listing.vetoedAt !== null) {
@@ -77,7 +97,9 @@ export function rankListings<T extends RankableListing>(
   listings: readonly T[],
   episodeId?: string,
 ): RankedListing<T>[] {
-  const eligible = listings.filter((listing) => isEligible(listing, episodeId));
+  const eligible = paidListings(listings).filter((listing) =>
+    isEligible(listing, episodeId),
+  );
   const ordered = [...eligible].sort((a, b) => {
     if (a.bidUsd !== b.bidUsd) {
       return b.bidUsd - a.bidUsd;

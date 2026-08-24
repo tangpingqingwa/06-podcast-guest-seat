@@ -6,7 +6,9 @@ import { insertListing, type Listing } from "../src/listings.js";
 import {
   applyPaidOpen,
   applyPaidRaise,
+  isPaidListing,
   MIN_BID_USD,
+  paidListings,
   quoteCompetingBid,
   quoteOpenBid,
   quoteRaise,
@@ -328,6 +330,73 @@ test("unpaid and vetoed rows do not take rank", () => {
   assert.deepEqual(
     ranked.map((row) => ({ id: row.id, rank: row.rank })),
     [{ id: "lst_paid", rank: 1 }],
+  );
+});
+
+test("unpaid stays off the rundown — No #1 guest until Polar reports paid", () => {
+  const unpaid = {
+    ...paidListing({
+      id: "lst_unpaid",
+      episodeId: "ep_12",
+      name: "Ghost Guest",
+      siteUrl: "https://ghost.example/",
+      oneLiner: "Abandoned Polar checkout.",
+      bidUsd: 99,
+      firstBidAt: "2026-08-22T01:00:00.000Z",
+    }),
+    paidAt: "",
+  } satisfies RankableListing;
+  const abandoned = {
+    ...paidListing({
+      id: "lst_abandoned",
+      episodeId: "ep_12",
+      name: "Vapor Co",
+      siteUrl: "https://vapor.example/",
+      oneLiner: "Epoch paidAt is not Polar paid.",
+      bidUsd: 80,
+      firstBidAt: "2026-08-22T01:30:00.000Z",
+    }),
+    paidAt: "1970-01-01T00:00:00.000Z",
+  } satisfies RankableListing;
+  const paid = paidListing({
+    id: "lst_paid_only",
+    episodeId: "ep_12",
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 5,
+    firstBidAt: "2026-08-22T03:00:00.000Z",
+    paidAt: "2026-08-22T03:00:05.000Z",
+  });
+  const vetoed = paidListing({
+    id: "lst_vetoed",
+    episodeId: "ep_12",
+    name: "Hard Sell Co",
+    siteUrl: "https://hardsell.example/",
+    oneLiner: "Buy my course on air.",
+    bidUsd: 20,
+    firstBidAt: "2026-08-22T00:30:00.000Z",
+    paidAt: "2026-08-22T00:30:05.000Z",
+    vetoedAt: "2026-08-22T04:00:00.000Z",
+    vetoReason: "hard sell",
+  });
+
+  assert.equal(isPaidListing(unpaid), false);
+  assert.equal(isPaidListing(abandoned), false);
+  assert.equal(isPaidListing(paid), true);
+  assert.equal(isPaidListing(vetoed), true);
+  assert.deepEqual(
+    paidListings([unpaid, abandoned, paid, vetoed]).map((row) => row.id),
+    ["lst_paid_only", "lst_vetoed"],
+  );
+  assert.deepEqual(rankListings([unpaid, abandoned]), []);
+  const mixed = rankListings([unpaid, abandoned, paid, vetoed]);
+  assert.equal(mixed.length, 1);
+  assert.equal(mixed[0]?.id, "lst_paid_only");
+  assert.equal(mixed[0]?.rank, 1);
+  assert.doesNotMatch(
+    mixed.map((row) => row.id).join(","),
+    /lst_unpaid|lst_abandoned/,
   );
 });
 
