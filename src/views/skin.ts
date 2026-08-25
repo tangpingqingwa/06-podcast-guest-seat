@@ -197,6 +197,8 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-facts],
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim],
+.studio.studio-open-empty[data-empty-honest] [data-rolling-week],
+.studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
 .studio.studio-open-empty[data-empty-honest] [data-claim-locked],
 .studio.studio-open-empty[data-empty-honest] [data-lock-certain],
@@ -214,6 +216,8 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-facts],
 .studio.studio-open-empty [data-later-fact],
 .studio.studio-open-empty [data-later-claim],
+.studio.studio-open-empty [data-rolling-week],
+.studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
 .studio.studio-open-empty .later-fact,
 .studio.studio-open-empty .later-facts,
@@ -642,6 +646,15 @@ export const OCCUPIED_CSS = /* css */ `
   height: 2.35rem;
   font-size: 0.92rem;
   font-weight: 600;
+}
+/* Occupied live: rolling last-7-days window. Not a civil-midnight lock. */
+.studio.studio-open-occupied .rundown[data-rolling-week] .week-window[data-rolling-week] {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--muted);
 }
 `;
 

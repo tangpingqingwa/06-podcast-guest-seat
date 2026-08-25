@@ -7,6 +7,7 @@ import {
   applyPaidOpen,
   applyPaidRaise,
   isPaidListing,
+  livePaidListings,
   MIN_BID_USD,
   paidListings,
   quoteCompetingBid,
@@ -451,4 +452,74 @@ test("SQLite raise keeps firstBidAt; insertListing rows still rank", () => {
   assert.equal(raised.chargeUsd, 1);
   assert.equal(raised.listing.firstBidAt, "2026-08-22T01:00:00.000Z");
   assert.equal(rankedListingsForEpisode(db, episode.id)[0]?.rank, 1);
+});
+
+test("rankListings uses only the rolling last-7-days paidAt window", () => {
+  const now = new Date("2026-08-24T00:00:00.000Z");
+  const ranked = rankListings(
+    [
+      paidListing({
+        id: "lst_then",
+        episodeId: "ep_12",
+        bidUsd: 99,
+        firstBidAt: "2026-08-16T23:59:59.000Z",
+        paidAt: "2026-08-16T23:59:59.000Z",
+      }),
+      paidListing({
+        id: "lst_now",
+        episodeId: "ep_12",
+        bidUsd: 5,
+        firstBidAt: "2026-08-17T00:00:00.000Z",
+        paidAt: "2026-08-17T00:00:00.000Z",
+      }),
+    ],
+    "ep_12",
+    now,
+  );
+  assert.deepEqual(
+    ranked.map((row) => ({ id: row.id, rank: row.rank, bidUsd: row.bidUsd })),
+    [{ id: "lst_now", rank: 1, bidUsd: 5 }],
+  );
+  assert.deepEqual(
+    livePaidListings(
+      [
+        paidListing({
+          id: "lst_then",
+          episodeId: "ep_12",
+          bidUsd: 99,
+          firstBidAt: "2026-08-16T23:59:59.000Z",
+          paidAt: "2026-08-16T23:59:59.000Z",
+        }),
+        paidListing({
+          id: "lst_now",
+          episodeId: "ep_12",
+          bidUsd: 5,
+          firstBidAt: "2026-08-17T00:00:00.000Z",
+          paidAt: "2026-08-17T00:00:00.000Z",
+        }),
+      ],
+      now,
+    ).map((row) => row.id),
+    ["lst_now"],
+  );
+});
+
+test("Monday 00:00 UTC does not drop a rolling-week #1", () => {
+  const monday = new Date("2026-08-17T00:00:00.000Z");
+  const ranked = rankListings(
+    [
+      paidListing({
+        id: "lst_sunday",
+        episodeId: "ep_12",
+        bidUsd: 12,
+        firstBidAt: "2026-08-16T12:00:00.000Z",
+        paidAt: "2026-08-16T12:00:00.000Z",
+      }),
+    ],
+    "ep_12",
+    monday,
+  );
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0]?.id, "lst_sunday");
+  assert.equal(ranked[0]?.rank, 1);
 });

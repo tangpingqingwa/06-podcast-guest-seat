@@ -58,6 +58,8 @@ This is not a booking marketplace, not a talent agency, and not a comments threa
 
 Cadence is **per episode**, not a forever board.
 
+Occupied live `/` ranks Polar-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. Host lock still freezes the episode. Paid rows older than 7 days stay stored; they do not occupy the live rundown.
+
 1. A show opens episode `N` (guest seat or 60-second open).
 2. Bids land on that episode’s board until the host **locks** it (or the documented lock time).
 3. After lock, the booked listing is the highest remaining eligible bid (see veto).
@@ -81,6 +83,7 @@ Public leaderboard. No ads, no bidder API keys, no revenue share. You pay to sta
 | Raise | Same listing (same episode + same site identity) may raise. New total must be at least **$1 above the current #1**. Payer pays only the **difference**. |
 | Identity | Another bidder cannot steal a listing by paying only that difference. They pay a full new bid. |
 | Claim | A **completed payment** claims the rank. Unpaid checkout does not. |
+| Window | Occupied live rank is Polar-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. |
 | Tracking | Query strings are stripped from listing URLs. Affiliate / referral / UTM params do not survive. |
 | Shorteners | Not allowed as the stored URL. Resolve to the redirect target or reject. |
 | Chat / NSFW | Reject. Telegram, WhatsApp, Discord, Messenger, Signal, and similar invite hosts. Sexual / adult platforms. |

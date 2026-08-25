@@ -9,6 +9,7 @@ import {
 import { listListingsForEpisode, type Listing } from "../../listings.js";
 import {
   isPaidListing,
+  livePaidListings,
   MIN_BID_USD,
   paidListings,
   rankListings,
@@ -69,9 +70,13 @@ export function displaySite(siteUrl: string): string {
   }
 }
 
-export function boardRows(listings: readonly Listing[]): BoardRow[] {
-  const paid = paidListings(listings);
-  const ranked = rankListings(paid);
+export function boardRows(
+  listings: readonly Listing[],
+  now?: Date,
+): BoardRow[] {
+  const paid =
+    now !== undefined ? livePaidListings(listings, now) : paidListings(listings);
+  const ranked = rankListings(paid, undefined, now);
   const rankedIds = new Set(ranked.map((row) => row.id));
   const visible: BoardRow[] = ranked.map((row: RankedListing) => ({
     id: row.id,
@@ -477,7 +482,9 @@ export function renderBoardHtml(
   priorLocked?: Episode,
 ): string {
   const canCharge = Boolean(episode && episode.lockedAt === null);
-  const rows = episode ? boardRows(paidListings(listings)) : [];
+  const rows = episode
+    ? boardRows(listings, canCharge ? now : undefined)
+    : [];
   const nextSeat = Boolean(canCharge && rows.length === 0 && priorLocked);
   const rundown =
     !episode
@@ -486,6 +493,12 @@ export function renderBoardHtml(
         ? canCharge
           ? renderOpenEmptyRundown(episode, nextSeat)
           : `<p class="empty" data-empty-board>No paid listings on this episode yet.</p>`
+        : canCharge
+        ? `<div class="rundown" data-rundown data-rolling-week="">
+    <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
+    <p class="week-window" data-rolling-week="">Rolling last 7 days. Not Monday 00:00 UTC.</p>
+    ${rows.map((row) => renderGuestCard(row, now, canCharge)).join("\n    ")}
+  </div>`
         : `<div class="rundown" data-rundown>
     <div class="rundown-head"><span>Rundown</span><span>Rank is the bid</span></div>
     ${rows.map((row) => renderGuestCard(row, now, canCharge)).join("\n    ")}
@@ -564,7 +577,7 @@ export function renderAboutHtml(): string {
 <h1>About</h1>
 <p>This is a public auction for the next episode’s <strong>guest seat</strong> or a <strong>60-second open</strong>. People and companies bid whole US dollars. Rank is the bid — nothing else.</p>
 <p id="when-open">The host opens each episode from the desk on <a href="/">/</a>. Until that board exists, the claim is a preview — Polar cannot charge. When episode N opens, the first paid bid of at least $5 takes #1.</p>
-<p>Cadence is <strong>per episode</strong>. When the host locks episode N, the highest remaining eligible bid is booked. Episode N+1 opens empty. Prior bids do not carry.</p>
+<p>Cadence is <strong>per episode</strong>. Occupied live rank is the <strong>rolling last 7 days</strong> from paid Polar <code>paidAt</code>. Not a civil-midnight lock. Not Monday 00:00 UTC. When the host locks episode N, the highest remaining eligible bid is booked. Episode N+1 opens empty. Prior bids do not carry.</p>
 <p>The host can still say no. <strong>Veto defaults on for guest seat</strong> and off for a 60-second open. A vetoed row stays visible with a public reason.</p>
 <p>Clicks go through this board so the click count is public. Tracking query strings are stripped. Chat invites and adult platforms are rejected.</p>
 </article>`,
@@ -588,6 +601,7 @@ export function renderRulesHtml(): string {
     <tr><th>Raise</th><td>Same listing (same episode + same site identity) may raise. New total must be at least $1 above the current #1. Payer pays only the <strong>difference</strong>.</td></tr>
     <tr><th>Identity</th><td>Another bidder cannot steal a listing by paying only that difference. They pay a full new bid.</td></tr>
     <tr><th>Claim</th><td>A completed payment claims the rank. Unpaid checkout does not.</td></tr>
+    <tr><th>Window</th><td>Occupied live rank is the <strong>rolling last 7 days</strong> from paidAt. Not a civil-midnight lock. Not Monday 00:00 UTC. Host lock still freezes the episode.</td></tr>
     <tr><th>Tracking</th><td>Query strings are stripped from listing URLs. Affiliate / referral / UTM params do not survive. /go never forwards query junk.</td></tr>
     <tr><th>Shorteners</th><td>Not allowed as the stored URL.</td></tr>
     <tr><th>Chat / NSFW</th><td>Rejected. Telegram, WhatsApp, Discord, Messenger, Signal, and similar invite hosts. Sexual / adult platforms (OnlyFans, Pornhub, Fansly, and the denylist in code).</td></tr>

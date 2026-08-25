@@ -215,6 +215,40 @@ if [[ -f package.json ]]; then
     || fail "occupied later-claim title CSS must recede after the #1 guest"
   grep -q 'Occupied live: Claim is a later write after the #1 guest' src/views/skin.ts \
     || fail "occupied CSS must document Claim as a later write after the #1 guest"
+  grep -q 'livePaidListings' src/rank.ts \
+    || fail "rank engine missing livePaidListings rolling-week occupancy"
+  grep -q 'bidInRollingWeek' src/rank.ts \
+    || fail "rank engine missing bidInRollingWeek live window"
+  [[ -f src/window.ts ]] || fail "missing src/window.ts"
+  [[ -s src/window.ts ]] || fail "empty src/window.ts"
+  [[ -f tests/window.test.ts ]] || fail "missing tests/window.test.ts"
+  grep -q 'ROLLING_WEEK_MS' src/window.ts || fail "src/window.ts missing ROLLING_WEEK_MS"
+  grep -q 'rollingWeekStart' src/window.ts || fail "src/window.ts missing rollingWeekStart"
+  grep -q 'bidInRollingWeek' src/window.ts || fail "src/window.ts missing bidInRollingWeek"
+  grep -q 'data-rolling-week' src/http/routes/pages.ts \
+    || fail "occupied live rundown missing data-rolling-week"
+  grep -q 'Rolling last 7 days' src/http/routes/pages.ts \
+    || fail "occupied live rundown missing rolling last-7-days copy"
+  grep -q 'Not Monday 00:00 UTC' src/http/routes/pages.ts \
+    || fail "occupied live rundown must reject Monday 00:00 UTC lock"
+  grep -q 'class="week-window"' src/http/routes/pages.ts \
+    || fail "occupied live rundown missing week-window"
+  grep -F -q '.studio.studio-open-occupied .rundown[data-rolling-week] .week-window[data-rolling-week]' src/views/skin.ts \
+    || fail "occupied rolling-week CSS must be scoped to Polar-paid studio-open-occupied"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-rolling-week]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked rolling-week chrome"
+  grep -F -q '.studio.studio-open-empty [data-rolling-week]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked rolling-week without stamp-only"
+  grep -F -q '.studio.studio-open-empty .week-window' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked week-window class"
+  grep -q 'Occupied live: rolling last-7-days window' src/views/skin.ts \
+    || fail "occupied CSS must document rolling last-7-days window"
+  grep -q 'rolling last 7 days' SPEC.md \
+    || fail "SPEC.md missing rolling last-7-days occupied live window"
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N' \
+    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
+    fail "do not stamp another named hop; compose occupied rolling last-7-days window"
+  fi
   grep -F -q $'${ticket}\n${rundown}\n${claim}\n${desk}' src/http/routes/pages.ts \
     || fail "occupied live Claim must render after the rundown, not above the #1 guest"
   grep -q 'data-later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat mark"
@@ -596,6 +630,12 @@ if [[ -f package.json ]]; then
     || fail "occupied live host Lock after rundown test did not run"
   grep -q 'Claim stays after the #1 guest' "$test_log" \
     || fail "occupied live Claim after #1 guest leftover test did not run"
+  grep -q 'occupied week window is rolling last-7-days' "$test_log" \
+    || fail "occupied live rolling last-7-days window test did not run"
+  grep -q 'rolling last-7-days window is 7' "$test_log" \
+    || fail "rolling last-7-days window math test did not run"
+  grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \
+    || fail "Monday midnight rolling-week test did not run"
   grep -q 'unpaid stays off the rundown' "$test_log" \
     || fail "unpaid stays off the rundown leftover test did not run"
   grep -q 'No #1 guest until Polar reports paid' "$test_log" \

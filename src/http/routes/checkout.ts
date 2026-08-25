@@ -153,7 +153,7 @@ export function quoteCheckout(
     if (listingIdHint !== undefined && listingIdHint !== existing.id) {
       throw new RankError("full_bid_required", "other bidders pay a full new bid");
     }
-    const quote = quoteRaise(existing, bidUsd, listings, episodeId);
+    const quote = quoteRaise(existing, bidUsd, listings, episodeId, new Date());
     return {
       episodeId,
       listingId: existing.id,

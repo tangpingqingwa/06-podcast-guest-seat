@@ -116,7 +116,8 @@ type PolarPort = {
 | `veto.test.ts` | guest_seat default on; sixty_second_open default off; veto drops #1; flag off → reject veto |
 | `episode.test.ts` | new episode empty; old bids do not carry |
 | `polar.test.ts` | fixture checkout claims rank; `POLAR_FIXTURE_ONLY` wins; no live host |
-| `pages.test.ts` | `/` board; `/about`; `/rules`; public clicks |
+| `pages.test.ts` | `/` board; `/about`; `/rules`; public clicks; occupied live rolling last-7-days window |
+| `window.test.ts` | rolling last 7 days is 7×24h; Monday 00:00 UTC does not drop an in-window bid |
 | `scripts/test.sh` | contract checks **plus** `tsc` + `node:test` once `package.json` exists |
 
 Live Polar is **not** in CI. Optional `scripts/live-smoke.sh` is operator-only.

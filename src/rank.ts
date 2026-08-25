@@ -7,6 +7,7 @@ import {
   type InsertListingInput,
   type Listing,
 } from "./listings.js";
+import { bidInRollingWeek } from "./window.js";
 
 /** SPEC §4. First bid on a listing. */
 export const MIN_BID_USD = 5;
@@ -72,6 +73,19 @@ export function paidListings<T extends Pick<RankableListing, "paidAt">>(
   return listings.filter(isPaidListing);
 }
 
+/**
+ * Polar-paid rows still inside the rolling last-7-days live window.
+ * Occupied `/` uses this. Locked archives keep every paid row.
+ */
+export function livePaidListings<T extends Pick<RankableListing, "paidAt">>(
+  listings: readonly T[],
+  now: Date = new Date(),
+): T[] {
+  return paidListings(listings).filter((listing) =>
+    bidInRollingWeek(listing.paidAt, now),
+  );
+}
+
 /** Paid, not vetoed, same episode when `episodeId` is passed. */
 export function isEligible(
   listing: RankableListing,
@@ -92,14 +106,16 @@ export function isEligible(
 /**
  * Eligible only. Order: bidUsd DESC, firstBidAt ASC, id ASC.
  * Rank is the bid — clicks and name are not keys.
+ * Pass `now` to rank only Polar-paid `paidAt` still inside the rolling last 7 days.
  */
 export function rankListings<T extends RankableListing>(
   listings: readonly T[],
   episodeId?: string,
+  now?: Date,
 ): RankedListing<T>[] {
-  const eligible = paidListings(listings).filter((listing) =>
-    isEligible(listing, episodeId),
-  );
+  const pool =
+    now !== undefined ? livePaidListings(listings, now) : paidListings(listings);
+  const eligible = pool.filter((listing) => isEligible(listing, episodeId));
   const ordered = [...eligible].sort((a, b) => {
     if (a.bidUsd !== b.bidUsd) {
       return b.bidUsd - a.bidUsd;
@@ -148,13 +164,16 @@ export function quoteRaise(
   newTotalUsd: number,
   board: readonly RankableListing[],
   episodeId?: string,
+  now?: Date,
 ): BidQuote {
   const nextUsd = requireWholeUsd(newTotalUsd);
-  const ranked = rankListings(board, episodeId);
+  const ranked = rankListings(board, episodeId, now);
   const top = ranked[0];
   const raiserIsTop = top?.id === existing.id;
   const minTotal =
-    top !== undefined && !raiserIsTop ? top.bidUsd + 1 : existing.bidUsd + 1;
+    top !== undefined && !raiserIsTop
+      ? Math.max(existing.bidUsd + 1, top.bidUsd + 1)
+      : existing.bidUsd + 1;
   if (nextUsd < minTotal) {
     throw new RankError(
       "raise_too_low",
