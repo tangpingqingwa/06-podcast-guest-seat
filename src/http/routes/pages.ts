@@ -297,6 +297,7 @@ function renderClaim(input: {
   defaultBid: number;
   emptyBoard: boolean;
   nextSeat?: boolean;
+  topUsd?: number;
 }): string {
   const episode = input.episode;
   if (episode && !input.canCharge) {
@@ -366,15 +367,28 @@ function renderClaim(input: {
       ? " data-later-claim-window"
       : "";
   const claimRaise = occupiedLive ? " data-later-claim-raise" : "";
+  const topUsd = input.topUsd;
+  const raiseChargeUsd =
+    occupiedLive && topUsd !== undefined && topUsd > 0
+      ? Math.max(0, input.defaultBid - topUsd)
+      : undefined;
+  const bidField =
+    raiseChargeUsd !== undefined && topUsd !== undefined
+      ? `<label class="bid-field" data-later-claim-raise-amount>
+        <span class="sr-only">New total in dollars. Polar charges the raise difference.</span>
+        <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}"${disabled}/></span>
+        <span class="raise-amount" data-raise-amount>Polar charges $<span data-raise-amount-usd>${raiseChargeUsd}</span></span>
+      </label>`
+      : `<label class="bid-field">
+        <span class="sr-only">Amount in dollars</span>
+        $<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}"${disabled}/>
+      </label>`;
   return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title"${titleMarks}>
     <span>${title}</span>
     <span class="bid-stepper">
       <button type="button" class="step" data-bid-step="-1" aria-label="Decrease bid by one dollar"${disabled}>−</button>
-      <label class="bid-field">
-        <span class="sr-only">Amount in dollars</span>
-        $<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}"${disabled}/>
-      </label>
+      ${bidField}
       <button type="button" class="step" data-bid-step="1" aria-label="Increase bid by one dollar"${disabled}>+</button>
     </span>
   </h1>
@@ -528,6 +542,7 @@ export function renderBoardHtml(
     defaultBid: defaultClaimBidUsd(rows),
     emptyBoard: rows.length === 0,
     nextSeat,
+    topUsd: rows.find((row) => row.rank === 1)?.bidUsd,
   });
   const desk = !canCharge
     ? renderHostOpenDesk({ nextLabel, lockedEpisode })
@@ -575,11 +590,20 @@ ${studio}
       var n = parseInt(String(raw).replace(/[^0-9]/g, ""), 10);
       return Number.isFinite(n) ? Math.max(min, n) : min;
     }
+    var current = parseInt(String(input.getAttribute("data-current-usd") || ""), 10);
+    var chargeUsd = document.querySelector("[data-raise-amount-usd]");
+    function syncCharge() {
+      if (!chargeUsd || !Number.isFinite(current)) return;
+      var next = parseBid(input.value);
+      chargeUsd.textContent = String(next > current ? next - current : 0);
+    }
     document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         input.value = String(Math.max(min, parseBid(input.value) + Number(btn.getAttribute("data-bid-step"))));
+        syncCharge();
       });
     });
+    input.addEventListener("input", syncCharge);
   })();
 </script>`,
   });
