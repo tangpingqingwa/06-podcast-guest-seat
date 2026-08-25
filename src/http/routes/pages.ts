@@ -357,6 +357,10 @@ function renderClaim(input: {
     raiseChargeUsd !== undefined
       ? `You pay $<span data-raiser-claim-usd>${raiseChargeUsd}</span>. Same site: the raise difference, not a full bid.`
       : "You pay the raise difference, not a full bid.";
+  const occupiedRaiserHint =
+    raiseChargeUsd !== undefined
+      ? `Already on this episode: you pay $<span data-raiser-form-hint-usd>${raiseChargeUsd}</span>, the raise difference.`
+      : "Already on this episode: you pay the raise difference.";
   const occupiedNote = episode
     ? `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} <span data-new-guest-claim-note>A new guest pays the full bid. Same site raises. You pay only the difference.</span><span data-raiser-claim-note hidden>${occupiedRaiserNote}</span>`
     : "";
@@ -373,7 +377,7 @@ function renderClaim(input: {
       ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
       : openEmpty
         ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
-        : "A new guest pays the full bid. Already on this episode? Enter the same site and raise. You pay only the difference.";
+        : `<span data-new-guest-form-hint>A new guest pays the full bid. Already on this episode? Enter the same site and raise. You pay only the difference.</span><span data-raiser-form-hint hidden>${occupiedRaiserHint}</span>`;
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
@@ -419,6 +423,8 @@ function renderClaim(input: {
       ? " data-later-claim-window"
       : "";
   const claimNoteLead = occupiedLive ? ' data-claim-note-lead="new"' : "";
+  const formHintLead = occupiedLive ? ' data-form-hint-lead="new"' : "";
+  const formHintMark = occupiedLive ? " data-later-claim-form-hint" : "";
   const claimRaise = occupiedLive ? " data-later-claim-raise" : "";
   const liveListingsJson =
     occupiedLive && input.liveListings && input.liveListings.length > 0
@@ -452,7 +458,7 @@ function renderClaim(input: {
     ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
     ${bidForm}
   </form>
-  <p class="form-hint">${hint}</p>
+  <p class="form-hint"${formHintMark}${formHintLead}>${hint}</p>
 </section>`;
 }
 
@@ -657,6 +663,10 @@ ${studio}
     var raiserNote = document.querySelector("[data-raiser-claim-note]");
     var raiserClaimUsd = document.querySelector("[data-raiser-claim-usd]");
     var claimNoteLead = document.querySelector("[data-claim-note-lead]");
+    var newGuestHint = document.querySelector("[data-new-guest-form-hint]");
+    var raiserHint = document.querySelector("[data-raiser-form-hint]");
+    var raiserHintUsd = document.querySelector("[data-raiser-form-hint-usd]");
+    var formHintLead = document.querySelector("[data-form-hint-lead]");
     var bidField = document.querySelector("[data-later-claim-raise-amount]");
     var siteInput = document.querySelector('input[name="siteUrl"]');
     var listings = [];
@@ -701,6 +711,7 @@ ${studio}
           : 0;
       if (raiseLeadUsd) raiseLeadUsd.textContent = String(difference);
       if (raiserClaimUsd) raiserClaimUsd.textContent = String(difference);
+      if (raiserHintUsd) raiserHintUsd.textContent = String(difference);
       if (newGuestCharge) {
         if (raising) newGuestCharge.setAttribute("hidden", "");
         else newGuestCharge.removeAttribute("hidden");
@@ -719,6 +730,15 @@ ${studio}
         else raiserNote.setAttribute("hidden", "");
       }
       if (claimNoteLead) claimNoteLead.setAttribute("data-claim-note-lead", raising ? "raise" : "new");
+      if (newGuestHint) {
+        if (raising) newGuestHint.setAttribute("hidden", "");
+        else newGuestHint.removeAttribute("hidden");
+      }
+      if (raiserHint) {
+        if (raising) raiserHint.removeAttribute("hidden");
+        else raiserHint.setAttribute("hidden", "");
+      }
+      if (formHintLead) formHintLead.setAttribute("data-form-hint-lead", raising ? "raise" : "new");
     }
     document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
