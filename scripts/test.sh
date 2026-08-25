@@ -293,6 +293,14 @@ if [[ -f package.json ]]; then
     || fail "occupied CSS must document Polar charge as the raise difference on dashed \$amount"
   grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount]' src/views/skin.ts \
     || fail "occupied later-claim raise-amount CSS must be scoped to occupied dashed \$amount"
+  grep -q 'data-new-bid-usd' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing Polar full new bid on dashed \$amount"
+  grep -q 'A new guest pays the full bid' src/http/routes/pages.ts \
+    || fail "occupied later-claim must name that a new guest pays the full bid"
+  grep -q 'Occupied live: later-claim names Polar' src/views/skin.ts \
+    || fail "occupied CSS must document Polar full new bid for a new guest"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-new-bid-usd]' src/views/skin.ts \
+    || fail "occupied later-claim full-bid CSS must be scoped to occupied dashed \$amount"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-identity"
   grep -F -q '.studio.studio-open-empty [data-later-claim-identity]' src/views/skin.ts \
@@ -311,6 +319,10 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied raise-amount"
   grep -F -q '.studio.studio-open-empty [data-raise-amount]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied raise-amount without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-bid-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-bid-usd"
+  grep -F -q '.studio.studio-open-empty [data-new-bid-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-bid-usd without stamp-only"
   grep -F -q '.studio.studio-open-empty .raise-amount' src/views/skin.ts \
     || fail "empty-open shell must hide leaked raise-amount class"
   if grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .listing-identity[data-later-write]' src/views/skin.ts; then
@@ -320,7 +332,7 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied later-claim-window"
   grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after' \
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; name rolling last-7-days on empty copy"
   fi
@@ -719,6 +731,8 @@ if [[ -f package.json ]]; then
     || fail "occupied later-claim raise difference beside Outbid test did not run"
   grep -q 'GET / on occupied live names the Polar charge as the raise difference on later-claim dashed' "$test_log" \
     || fail "occupied later-claim dashed \$amount raise difference test did not run"
+  grep -q 'GET / on occupied live names Polar' "$test_log" \
+    || fail "occupied later-claim new-guest full bid test did not run"
   grep -q 'rolling last-7-days window is 7' "$test_log" \
     || fail "rolling last-7-days window math test did not run"
   grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \
