@@ -312,7 +312,7 @@ function renderClaim(input: {
       ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
       : openEmpty
         ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
-        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`;
+        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} You pay only the difference.`;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
     : nextSeat
@@ -365,6 +365,7 @@ function renderClaim(input: {
     : occupiedLive
       ? " data-later-claim-window"
       : "";
+  const claimRaise = occupiedLive ? " data-later-claim-raise" : "";
   return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title"${titleMarks}>
     <span>${title}</span>
@@ -377,7 +378,7 @@ function renderClaim(input: {
       <button type="button" class="step" data-bid-step="1" aria-label="Increase bid by one dollar"${disabled}>+</button>
     </span>
   </h1>
-  <p class="claim-note"${claimWindow}>${note}</p>
+  <p class="claim-note"${claimWindow}${claimRaise}>${note}</p>
   <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
     ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
     ${bidForm}
