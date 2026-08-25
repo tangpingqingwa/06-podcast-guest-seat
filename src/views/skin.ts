@@ -211,6 +211,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-claim],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-window],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-identity],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim-raise],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
@@ -232,6 +233,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-claim],
 .studio.studio-open-empty [data-later-claim-window],
 .studio.studio-open-empty [data-later-claim-identity],
+.studio.studio-open-empty [data-later-claim-raise],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
@@ -666,6 +668,10 @@ export const OCCUPIED_CSS = /* css */ `
 }
 /* Occupied live: later-claim names rolling last-7-days beside Outbid. Not Monday 00:00 UTC. Empty claim-window stays off. */
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window] {
+  color: var(--muted);
+}
+/* Occupied live: later-claim names the raise difference beside Outbid. Polar raise = difference. Empty claim-note stays off. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] {
   color: var(--muted);
 }
 /* Occupied live: later-claim identity is a later write after Outbid. Empty later-write stays off. */
