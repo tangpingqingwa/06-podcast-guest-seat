@@ -6,7 +6,7 @@ import {
   nextEpisodeLabel,
   type Episode,
 } from "../../episodes.js";
-import { listListingsForEpisode, type Listing } from "../../listings.js";
+import { listListingsForEpisode, siteIdentity, type Listing } from "../../listings.js";
 import {
   isPaidListing,
   livePaidListings,
@@ -113,6 +113,45 @@ export function boardRows(
       vetoReason: row.vetoReason,
     }));
   return [...visible, ...vetoed];
+}
+
+export type LiveListingRef = {
+  identity: string;
+  bidUsd: number;
+};
+
+/** Occupied live listings a returning guest can raise. Vetoed rows are not a raise. */
+function liveListingRefs(rows: readonly BoardRow[]): LiveListingRef[] {
+  return rows
+    .filter((row) => !row.vetoed && row.rank !== null)
+    .map((row) => ({
+      identity: siteIdentity(row.siteUrl),
+      bidUsd: row.bidUsd,
+    }));
+}
+
+/** Host + path from a guest-typed site, including a missing https://. */
+export function siteIdentityFromGuestInput(raw: string): string | undefined {
+  const value = raw.trim();
+  if (!value) return undefined;
+  for (const candidate of [value, `https://${value}`]) {
+    try {
+      return siteIdentity(candidate);
+    } catch {
+      // try the next candidate
+    }
+  }
+  return undefined;
+}
+
+/** Same episode + same site identity is a raise. Polar bills only the difference. */
+export function matchLiveListing(
+  rawSiteUrl: string,
+  listings: readonly LiveListingRef[],
+): LiveListingRef | undefined {
+  const identity = siteIdentityFromGuestInput(rawSiteUrl);
+  if (!identity) return undefined;
+  return listings.find((row) => row.identity === identity);
 }
 
 function navLink(href: string, label: string, current: string): string {
@@ -298,6 +337,7 @@ function renderClaim(input: {
   emptyBoard: boolean;
   nextSeat?: boolean;
   topUsd?: number;
+  liveListings?: readonly LiveListingRef[];
 }): string {
   const episode = input.episode;
   if (episode && !input.canCharge) {
@@ -372,12 +412,19 @@ function renderClaim(input: {
     occupiedLive && topUsd !== undefined && topUsd > 0
       ? Math.max(0, input.defaultBid - topUsd)
       : undefined;
+  const liveListingsJson =
+    occupiedLive && input.liveListings && input.liveListings.length > 0
+      ? escapeHtml(JSON.stringify(input.liveListings))
+      : "";
+  const liveListingsAttr = liveListingsJson
+    ? ` data-live-listings="${liveListingsJson}"`
+    : "";
   const bidField =
     raiseChargeUsd !== undefined && topUsd !== undefined
-      ? `<label class="bid-field" data-later-claim-raise-amount>
-        <span class="sr-only">New total in dollars. Polar charges the full new bid. Same site: the raise difference.</span>
+      ? `<label class="bid-field" data-later-claim-raise-amount${liveListingsAttr}>
+        <span class="sr-only">New total in dollars. Polar charges the full new bid. Same site: Polar charges only the difference.</span>
         <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}"${disabled}/></span>
-        <span class="raise-amount" data-raise-amount>Polar charges $<span data-new-bid-usd>${input.defaultBid}</span> new. Raise $<span data-raise-amount-usd>${raiseChargeUsd}</span></span>
+        <span class="raise-amount" data-raise-amount data-polar-lead="new"><span data-new-guest-polar-charge>Polar charges $<span data-new-bid-usd>${input.defaultBid}</span> new. Raise $<span data-raise-amount-usd>${raiseChargeUsd}</span></span><span data-raiser-polar-charge hidden>Polar charges $<span data-raise-lead-usd>${raiseChargeUsd}</span>. Same site: only the difference</span></span>
       </label>`
       : `<label class="bid-field">
         <span class="sr-only">Amount in dollars</span>
@@ -536,6 +583,7 @@ export function renderBoardHtml(
 
   const lockedEpisode = episode && !canCharge ? episode : undefined;
   const booked = rows.find((row) => row.rank === 1);
+  const occupiedLive = Boolean(canCharge && rows.length > 0);
   const claim = renderClaim({
     episode,
     canCharge,
@@ -543,6 +591,7 @@ export function renderBoardHtml(
     emptyBoard: rows.length === 0,
     nextSeat,
     topUsd: rows.find((row) => row.rank === 1)?.bidUsd,
+    liveListings: occupiedLive ? liveListingRefs(rows) : undefined,
   });
   const desk = !canCharge
     ? renderHostOpenDesk({ nextLabel, lockedEpisode })
@@ -555,7 +604,6 @@ export function renderBoardHtml(
     canCharge,
     emptyBoard: rows.length === 0,
   });
-  const occupiedLive = Boolean(canCharge && rows.length > 0);
   const studio = nextSeat
     ? `${claim}
 ${ticket}
@@ -593,11 +641,65 @@ ${studio}
     var current = parseInt(String(input.getAttribute("data-current-usd") || ""), 10);
     var chargeUsd = document.querySelector("[data-raise-amount-usd]");
     var newBidUsd = document.querySelector("[data-new-bid-usd]");
+    var raiseLeadUsd = document.querySelector("[data-raise-lead-usd]");
+    var newGuestCharge = document.querySelector("[data-new-guest-polar-charge]");
+    var raiserCharge = document.querySelector("[data-raiser-polar-charge]");
+    var polarLead = document.querySelector("[data-polar-lead]");
+    var bidField = document.querySelector("[data-later-claim-raise-amount]");
+    var siteInput = document.querySelector('input[name="siteUrl"]');
+    var listings = [];
+    try {
+      listings = JSON.parse((bidField && bidField.getAttribute("data-live-listings")) || "[]");
+    } catch (err) {
+      listings = [];
+    }
+    function identityFrom(raw) {
+      var value = String(raw || "").trim();
+      if (!value) return "";
+      var candidates = [value, "https://" + value];
+      for (var i = 0; i < candidates.length; i++) {
+        try {
+          var parsed = new URL(candidates[i]);
+          var path = parsed.pathname.replace(/\\/+$/, "") || "/";
+          return parsed.hostname.toLowerCase() + path;
+        } catch (e) {}
+      }
+      return "";
+    }
+    function existingBid() {
+      var id = identityFrom(siteInput && siteInput.value);
+      if (!id) return NaN;
+      for (var i = 0; i < listings.length; i++) {
+        if (listings[i].identity === id) return listings[i].bidUsd;
+      }
+      return NaN;
+    }
     function syncCharge() {
       var next = parseBid(input.value);
       if (newBidUsd) newBidUsd.textContent = String(next);
-      if (!chargeUsd || !Number.isFinite(current)) return;
-      chargeUsd.textContent = String(next > current ? next - current : 0);
+      if (chargeUsd && Number.isFinite(current)) {
+        chargeUsd.textContent = String(next > current ? next - current : 0);
+      }
+      var existing = existingBid();
+      var raising = Number.isFinite(existing);
+      if (raiseLeadUsd) {
+        raiseLeadUsd.textContent = String(
+          raising
+            ? Math.max(0, next - existing)
+            : Number.isFinite(current) && next > current
+              ? next - current
+              : 0,
+        );
+      }
+      if (newGuestCharge) {
+        if (raising) newGuestCharge.setAttribute("hidden", "");
+        else newGuestCharge.removeAttribute("hidden");
+      }
+      if (raiserCharge) {
+        if (raising) raiserCharge.removeAttribute("hidden");
+        else raiserCharge.setAttribute("hidden", "");
+      }
+      if (polarLead) polarLead.setAttribute("data-polar-lead", raising ? "raise" : "new");
     }
     document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -606,6 +708,10 @@ ${studio}
       });
     });
     input.addEventListener("input", syncCharge);
+    if (siteInput) {
+      siteInput.addEventListener("input", syncCharge);
+      siteInput.addEventListener("change", syncCharge);
+    }
   })();
 </script>`,
   });

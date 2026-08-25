@@ -4,7 +4,7 @@ import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { createEpisode, getCurrentEpisode } from "../src/episodes.js";
 import { DEV_HOST_SESSION_SECRET } from "../src/http/routes/host.js";
-import { boardRows, renderBoardHtml } from "../src/http/routes/pages.js";
+import { boardRows, matchLiveListing, renderBoardHtml } from "../src/http/routes/pages.js";
 import { getListing, insertListing, type Listing } from "../src/listings.js";
 import { FixturePolar } from "../src/polar/fixture.js";
 
@@ -6781,7 +6781,7 @@ test("GET / on occupied live names the Polar charge as the raise difference on l
   assert.equal(countExact(occupied, "data-later-claim-raise-amount"), 1);
   assert.equal(countExact(occupied, "data-new-bid-usd"), 1);
   assert.equal(countExact(occupied, "data-raise-amount-usd"), 1);
-  assert.equal(countExact(occupied, "Polar charges $"), 1);
+  assert.equal(countExact(occupied, "Polar charges $"), 2);
   assert.equal(countAttr(occupied, "data-later-claim"), 1);
   assert.equal(countExact(occupied, 'data-first-click="guest"'), 1);
   assert.doesNotMatch(occupied, /data-later-write/);
@@ -7092,7 +7092,7 @@ test("GET / on occupied live names Polar's full new bid for a new guest — rais
   assert.match(occupied, /data-host-lock/);
   assert.equal(countExact(occupied, "data-new-bid-usd"), 1);
   assert.equal(countExact(occupied, "data-raise-amount-usd"), 1);
-  assert.equal(countExact(occupied, "Polar charges $"), 1);
+  assert.equal(countExact(occupied, "Polar charges $"), 2);
   assert.equal(countExact(claimNote, "A new guest pays the full bid"), 1);
   assert.equal(countExact(claimNote, "You pay only the difference"), 1);
   assert.equal(countExact(occupied, 'data-first-click="guest"'), 1);
@@ -7298,6 +7298,430 @@ test("GET / on occupied live names Polar's full new bid for a new guest — rais
     },
     payload:
       "episodeId=ep_live_claim_new_bid&name=Too%20Late&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Locked.&bidUsd=13",
+  });
+  assert.equal(lockedCheckout.statusCode, 409);
+  assert.match(lockedCheckout.body, /data-lock-409/);
+  assert.match(lockedCheckout.body, /episode_locked/);
+});
+
+test("GET / on occupied live Polar charge leads with the raise difference when the guest is raising — new guest still pays the full bid", async () => {
+  const monday = new Date("2026-08-17T00:00:00.000Z");
+  const episode = {
+    id: "ep_occupied_claim_raise_lead",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat" as const,
+    vetoEnabled: true,
+    opensAt: "2026-08-16T00:00:00.000Z",
+    locksAt: null,
+    lockedAt: null,
+  };
+  const listings: Listing[] = [
+    {
+      id: "lst_ada",
+      episodeId: episode.id,
+      name: "Ada Lovelace",
+      siteUrl: "https://example.com/ada",
+      oneLiner: "Notes on the analytical engine.",
+      bidUsd: 12,
+      firstBidAt: "2026-08-16T12:00:00.000Z",
+      paidAt: "2026-08-16T12:00:00.000Z",
+      clicks: 3,
+      vetoedAt: null,
+      vetoReason: null,
+    },
+    {
+      id: "lst_hold",
+      episodeId: episode.id,
+      name: "Hold Co",
+      siteUrl: "https://hold.example/",
+      oneLiner: "Still listed below #1.",
+      bidUsd: 8,
+      firstBidAt: "2026-08-16T18:00:00.000Z",
+      paidAt: "2026-08-16T18:00:00.000Z",
+      clicks: 2,
+      vetoedAt: null,
+      vetoReason: null,
+    },
+  ];
+  const liveRefs = [
+    { identity: "example.com/ada", bidUsd: 12 },
+    { identity: "hold.example/", bidUsd: 8 },
+  ];
+  assert.deepEqual(matchLiveListing("https://example.com/ada", liveRefs), {
+    identity: "example.com/ada",
+    bidUsd: 12,
+  });
+  assert.deepEqual(matchLiveListing("https://example.com/ada/", liveRefs), {
+    identity: "example.com/ada",
+    bidUsd: 12,
+  });
+  assert.deepEqual(matchLiveListing("example.com/ada", liveRefs), {
+    identity: "example.com/ada",
+    bidUsd: 12,
+  });
+  assert.deepEqual(matchLiveListing("https://hold.example/", liveRefs), {
+    identity: "hold.example/",
+    bidUsd: 8,
+  });
+  assert.equal(matchLiveListing("https://raise.example/", liveRefs), undefined);
+  assert.equal(matchLiveListing("", liveRefs), undefined);
+  const adaRaise = matchLiveListing("https://example.com/ada", liveRefs);
+  assert.equal(13 - (adaRaise?.bidUsd ?? 0), 1);
+  const holdRaise = matchLiveListing("https://hold.example/", liveRefs);
+  assert.equal(13 - (holdRaise?.bidUsd ?? 0), 5);
+
+  const occupiedHtml = renderBoardHtml(episode, listings, monday);
+  const occupied = studioMarkup(occupiedHtml);
+  const ticketAt = occupied.indexOf("data-show-ticket");
+  const rundownAt = occupied.indexOf("data-rundown");
+  const guestClickAt = occupied.indexOf('data-first-click="guest"');
+  const laterClaimClassAt = occupied.indexOf('class="claim later-claim"');
+  const laterClaimAt = occupied.indexOf("data-later-claim");
+  const claimAt = occupied.indexOf('id="claim"');
+  const claimTitleAt = occupied.indexOf("Claim the guest seat for");
+  const bidFieldAt = occupied.indexOf('class="bid-field"');
+  const raiseAmountAt = occupied.indexOf("data-later-claim-raise-amount");
+  const newGuestChargeAt = occupied.indexOf("data-new-guest-polar-charge");
+  const polarChargeAt = occupied.indexOf("Polar charges $");
+  const newBidUsdAt = occupied.indexOf("data-new-bid-usd");
+  const raiseAmountUsdAt = occupied.indexOf("data-raise-amount-usd");
+  const raiserChargeAt = occupied.indexOf("data-raiser-polar-charge");
+  const raiseLeadUsdAt = occupied.indexOf("data-raise-lead-usd");
+  const laterClaimWindowAt = occupied.indexOf("data-later-claim-window");
+  const laterClaimRaiseAt = occupied.indexOf("data-later-claim-raise>");
+  const newGuestCopyAt = occupied.indexOf("A new guest pays the full bid");
+  const raiseCopyAt = occupied.indexOf("You pay only the difference");
+  const outbidAt = occupied.indexOf(">Outbid</button>");
+  const identityAt = occupied.indexOf("data-later-claim-identity");
+  const siteAt = occupied.indexOf('name="siteUrl"');
+  const deskAt = occupied.indexOf("data-host-lock");
+  assert.notEqual(ticketAt, -1);
+  assert.notEqual(rundownAt, -1);
+  assert.notEqual(guestClickAt, -1);
+  assert.notEqual(laterClaimClassAt, -1);
+  assert.notEqual(laterClaimAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(claimTitleAt, -1);
+  assert.notEqual(bidFieldAt, -1);
+  assert.notEqual(raiseAmountAt, -1);
+  assert.notEqual(newGuestChargeAt, -1);
+  assert.notEqual(polarChargeAt, -1);
+  assert.notEqual(newBidUsdAt, -1);
+  assert.notEqual(raiseAmountUsdAt, -1);
+  assert.notEqual(raiserChargeAt, -1);
+  assert.notEqual(raiseLeadUsdAt, -1);
+  assert.notEqual(laterClaimWindowAt, -1);
+  assert.notEqual(laterClaimRaiseAt, -1);
+  assert.notEqual(newGuestCopyAt, -1);
+  assert.notEqual(raiseCopyAt, -1);
+  assert.notEqual(outbidAt, -1);
+  assert.notEqual(identityAt, -1);
+  assert.notEqual(siteAt, -1);
+  assert.notEqual(deskAt, -1);
+  assert.ok(ticketAt < rundownAt);
+  assert.ok(rundownAt < guestClickAt);
+  assert.ok(guestClickAt < laterClaimClassAt);
+  assert.ok(laterClaimClassAt < claimAt);
+  assert.ok(claimAt < laterClaimAt);
+  assert.ok(laterClaimAt < claimTitleAt);
+  assert.ok(claimTitleAt < bidFieldAt);
+  assert.ok(bidFieldAt < raiseAmountAt);
+  assert.ok(raiseAmountAt < newGuestChargeAt);
+  assert.ok(newGuestChargeAt < polarChargeAt);
+  assert.ok(polarChargeAt < newBidUsdAt);
+  assert.ok(newBidUsdAt < raiseAmountUsdAt);
+  assert.ok(raiseAmountUsdAt < raiserChargeAt);
+  assert.ok(raiserChargeAt < raiseLeadUsdAt);
+  assert.ok(raiseLeadUsdAt < laterClaimWindowAt);
+  assert.ok(laterClaimWindowAt < laterClaimRaiseAt);
+  assert.ok(laterClaimRaiseAt < newGuestCopyAt);
+  assert.ok(newGuestCopyAt < raiseCopyAt);
+  assert.ok(raiseCopyAt < outbidAt);
+  assert.ok(outbidAt < identityAt);
+  assert.ok(identityAt < siteAt);
+  assert.ok(siteAt < deskAt);
+  const claimBlock = occupied.slice(laterClaimClassAt, deskAt);
+  const bidField = occupied.slice(bidFieldAt, laterClaimWindowAt);
+  const newGuestCharge = occupied.slice(newGuestChargeAt, raiserChargeAt);
+  const raiserCharge = occupied.slice(raiserChargeAt, laterClaimWindowAt);
+  const claimNote = occupied.slice(
+    occupied.indexOf('class="claim-note"'),
+    occupied.indexOf("<form"),
+  );
+  assert.match(occupied, /class="studio studio-open-occupied"/);
+  assert.match(occupied, /class="claim later-claim"[^>]*id="claim"[^>]*data-later-claim/);
+  assert.match(bidField, /data-live-listings="/);
+  assert.match(bidField, /example.com\/ada/);
+  assert.match(bidField, /hold.example\//);
+  assert.match(bidField, /data-polar-lead="new"/);
+  assert.match(
+    newGuestCharge,
+    /Polar charges \$<span data-new-bid-usd>13<\/span> new\. Raise \$<span data-raise-amount-usd>1<\/span>/,
+  );
+  assert.doesNotMatch(newGuestCharge, /\bhidden\b/);
+  assert.match(
+    raiserCharge,
+    /data-raiser-polar-charge hidden>Polar charges \$<span data-raise-lead-usd>1<\/span>\. Same site: only the difference/,
+  );
+  assert.doesNotMatch(raiserCharge, /Polar charges \$<span data-new-bid-usd>13<\/span>/);
+  assert.doesNotMatch(raiserCharge, /you pay \$13/i);
+  assert.match(bidField, /name="bidUsd"[^>]*value="13"/);
+  assert.match(bidField, /data-current-usd="12"/);
+  assert.match(claimNote, /A new guest pays the full bid/);
+  assert.match(claimNote, /Same site raises/);
+  assert.match(claimNote, /You pay only the difference/);
+  assert.match(claimBlock, />Outbid<\/button>/);
+  assert.match(claimBlock, /data-later-claim-identity/);
+  assert.match(claimBlock, /Then name, site, one-liner/);
+  assert.match(occupied, /data-first-click="guest"/);
+  assert.match(occupied, /Ada Lovelace/);
+  assert.match(occupied, /data-host-lock/);
+  assert.equal(countExact(occupied, "data-new-guest-polar-charge"), 1);
+  assert.equal(countExact(occupied, "data-raiser-polar-charge"), 1);
+  assert.equal(countExact(occupied, "data-raise-lead-usd"), 1);
+  assert.equal(countExact(occupied, "data-new-bid-usd"), 1);
+  assert.equal(countExact(occupied, "data-raise-amount-usd"), 1);
+  assert.equal(countExact(occupied, "Polar charges $"), 2);
+  assert.equal(countExact(claimNote, "A new guest pays the full bid"), 1);
+  assert.equal(countExact(occupied, 'data-first-click="guest"'), 1);
+  assert.doesNotMatch(bidField, /Polar charges \$<span data-raise-amount-usd>1<\/span>/);
+  assert.doesNotMatch(occupied, /data-later-write/);
+  assert.doesNotMatch(occupied, /Claim #1 for/);
+  assert.doesNotMatch(occupied, /data-first-click="claim"/);
+  assert.doesNotMatch(occupied, /later-claim-raise-lead-after/);
+  assert.doesNotMatch(occupied, /occupied-raise-lead-after/);
+  assert.doesNotMatch(occupied, /raise-lead-after-outbid/);
+  assert.doesNotMatch(occupied, /later-claim-new-bid-after/);
+  assert.doesNotMatch(occupied, /claim-after-guest/);
+  assert.doesNotMatch(occupied, /lock-after-open-six/);
+  const occupiedCss = occupiedHtml.slice(
+    occupiedHtml.indexOf("<style>"),
+    occupiedHtml.indexOf("</style>"),
+  );
+  assert.match(
+    occupiedCss,
+    /Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising\. New guest still reads the full new bid/,
+  );
+  assert.match(
+    occupiedCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.bid-field\[data-later-claim-raise-amount\] \.raise-amount\[data-raise-amount\] \[data-raiser-polar-charge\]/,
+  );
+  assert.match(
+    occupiedCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.bid-field\[data-later-claim-raise-amount\] \.raise-amount\[data-raise-amount\] \[data-raise-lead-usd\]/,
+  );
+  assert.match(
+    occupiedCss,
+    /Occupied live: later-claim names Polar's full new bid for a new guest\. Raise stays the difference/,
+  );
+  assert.match(occupiedCss, /Occupied live: later-claim names the raise difference beside Outbid/);
+  assert.match(occupiedCss, /Occupied live: later-claim identity is a later write after Outbid/);
+  assert.match(occupiedCss, /Occupied live: Claim is a later write after the #1 guest \/ rundown/);
+  const raiseLeadCss = (
+    occupiedCss.split(
+      "Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising. New guest still reads the full new bid.",
+      2,
+    )[1] ?? ""
+  ).split("Occupied live: later-claim names rolling last-7-days beside Outbid")[0] ?? "";
+  assert.match(raiseLeadCss, /color:\s*var\(--muted\)/);
+  assert.doesNotMatch(raiseLeadCss, /background:/);
+  assert.doesNotMatch(raiseLeadCss, /var\(--on-air\)/);
+  assert.doesNotMatch(raiseLeadCss, /data-empty-claim-window/);
+  assert.doesNotMatch(raiseLeadCss, /listing-identity/);
+
+  const script = occupiedHtml.slice(
+    occupiedHtml.indexOf("<script>"),
+    occupiedHtml.indexOf("</script>"),
+  );
+  assert.match(script, /data-live-listings/);
+  assert.match(script, /input\[name="siteUrl"\]/);
+  assert.match(script, /data-new-guest-polar-charge/);
+  assert.match(script, /data-raiser-polar-charge/);
+  assert.match(script, /data-raise-lead-usd/);
+  assert.match(script, /data-polar-lead/);
+  assert.match(script, /setAttribute\("hidden"/);
+  assert.match(script, /removeAttribute\("hidden"/);
+  assert.match(script, /raising \? "raise" : "new"/);
+
+  const emptyDb = memoryDb();
+  createEpisode(emptyDb, {
+    id: "ep_empty_claim_raise_lead_stays_shipped",
+    showId: "show_english",
+    label: "Episode 1",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+  const emptyApp = await buildApp({ db: emptyDb });
+  after(() => emptyApp.close());
+  const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
+  const emptyStudio = studioMarkup(emptyBoard.body);
+  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyLaterWriteAt = emptyStudio.indexOf("data-later-write");
+  const emptyClaimNote = emptyStudio.slice(
+    emptyStudio.indexOf('class="claim-note"'),
+    emptyStudio.indexOf("<form"),
+  );
+  assert.match(emptyStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.match(emptyStudio, /Claim #1 for/);
+  assert.match(emptyStudio, /Then the guest site/);
+  assert.ok(emptyOutbidAt !== -1 && emptyLaterWriteAt > emptyOutbidAt);
+  assert.doesNotMatch(emptyClaimNote, /A new guest pays the full bid/);
+  assert.doesNotMatch(emptyClaimNote, /You pay only the difference/);
+  assert.doesNotMatch(emptyStudio, /Polar charges \$/);
+  assert.doesNotMatch(emptyStudio, /Same site: only the difference/);
+  assert.doesNotMatch(emptyStudio, /data-new-guest-polar-charge/);
+  assert.doesNotMatch(emptyStudio, /data-raiser-polar-charge/);
+  assert.doesNotMatch(emptyStudio, /data-raise-lead-usd/);
+  assert.doesNotMatch(emptyStudio, /data-live-listings/);
+  assert.doesNotMatch(emptyStudio, /data-new-bid-usd/);
+  assert.doesNotMatch(emptyStudio, /data-later-claim/);
+  assert.doesNotMatch(emptyStudio, /class="claim later-claim"/);
+  assert.doesNotMatch(emptyStudio, /studio-open-occupied/);
+  const emptyCss = emptyBoard.body.slice(
+    emptyBoard.body.indexOf("<style>"),
+    emptyBoard.body.indexOf("</style>"),
+  );
+  assert.match(emptyCss, /Empty open: guest site is a later write after Claim #1 \/ Outbid/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-raiser-polar-charge\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-raiser-polar-charge\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-raise-lead-usd\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-raise-lead-usd\]/);
+  assert.doesNotMatch(
+    emptyCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.bid-field\[data-later-claim-raise-amount\] \.raise-amount\[data-raise-amount\] \[data-raiser-polar-charge\]/,
+  );
+
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_live_claim_raise_lead",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-16T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: "ep_live_claim_raise_lead",
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+    clicks: 3,
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const live = await app.inject({ method: "GET", url: "/" });
+  assert.equal(live.statusCode, 200);
+  const liveStudio = studioMarkup(live.body);
+  const liveGuestAt = liveStudio.indexOf('data-first-click="guest"');
+  const liveLaterClaimAt = liveStudio.indexOf("data-later-claim");
+  const liveNewGuestChargeAt = liveStudio.indexOf("data-new-guest-polar-charge");
+  const liveNewBidAt = liveStudio.indexOf("data-new-bid-usd");
+  const liveRaiserChargeAt = liveStudio.indexOf("data-raiser-polar-charge");
+  const liveRaiseLeadAt = liveStudio.indexOf("data-raise-lead-usd");
+  const liveNewGuestCopyAt = liveStudio.indexOf("A new guest pays the full bid");
+  const liveOutbidAt = liveStudio.indexOf(">Outbid</button>");
+  const liveIdentityAt = liveStudio.indexOf("data-later-claim-identity");
+  assert.ok(liveGuestAt > -1 && liveGuestAt < liveLaterClaimAt);
+  assert.ok(liveLaterClaimAt < liveNewGuestChargeAt);
+  assert.ok(liveNewGuestChargeAt < liveNewBidAt);
+  assert.ok(liveNewBidAt < liveRaiserChargeAt);
+  assert.ok(liveRaiserChargeAt < liveRaiseLeadAt);
+  assert.ok(liveRaiseLeadAt < liveNewGuestCopyAt);
+  assert.ok(liveNewGuestCopyAt < liveOutbidAt);
+  assert.ok(liveOutbidAt < liveIdentityAt);
+  assert.match(liveStudio, /class="studio studio-open-occupied"/);
+  assert.match(liveStudio, /class="claim later-claim"/);
+  assert.match(
+    liveStudio,
+    /Polar charges \$<span data-new-bid-usd>13<\/span> new\. Raise \$<span data-raise-amount-usd>1<\/span>/,
+  );
+  assert.match(
+    liveStudio,
+    /data-raiser-polar-charge hidden>Polar charges \$<span data-raise-lead-usd>1<\/span>\. Same site: only the difference/,
+  );
+  assert.match(liveStudio, /A new guest pays the full bid/);
+  assert.match(liveStudio, /data-live-listings="/);
+  assert.match(liveStudio, /data-later-claim-identity/);
+  assert.match(liveStudio, /data-first-click="guest"/);
+  assert.match(liveStudio, /data-host-lock/);
+  assert.doesNotMatch(liveStudio, /Polar charges \$<span data-raise-amount-usd>1<\/span>/);
+  assert.doesNotMatch(liveStudio, /Claim #1 for/);
+  assert.doesNotMatch(liveStudio, /claim-after-guest/);
+  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  assert.match(liveScript, /input\[name="siteUrl"\]/);
+  assert.match(liveScript, /data-raiser-polar-charge/);
+
+  const newGuestCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    payload: {
+      episodeId: "ep_live_claim_raise_lead",
+      name: "Raise Co",
+      siteUrl: "https://raise.example/",
+      oneLiner: "Still live.",
+      bidUsd: 13,
+    },
+  });
+  assert.equal(newGuestCheckout.statusCode, 200);
+  const newGuestBody = newGuestCheckout.json() as {
+    kind: string;
+    chargeUsd: number;
+  };
+  assert.equal(newGuestBody.kind, "open");
+  assert.equal(newGuestBody.chargeUsd, 13);
+
+  const raiseCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    payload: {
+      episodeId: "ep_live_claim_raise_lead",
+      name: "Ada Lovelace",
+      siteUrl: "https://example.com/ada",
+      oneLiner: "Notes on the analytical engine.",
+      bidUsd: 13,
+    },
+  });
+  assert.equal(raiseCheckout.statusCode, 200);
+  const raiseBody = raiseCheckout.json() as { kind: string; chargeUsd: number };
+  assert.equal(raiseBody.kind, "raise");
+  assert.equal(raiseBody.chargeUsd, 1);
+
+  const locked = await app.inject({
+    method: "POST",
+    url: "/host/lock",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload: `episodeId=ep_live_claim_raise_lead&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
+  });
+  assert.equal(locked.statusCode, 303);
+  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const lockedStudio = studioMarkup(afterLock.body);
+  assert.match(lockedStudio, /Episode 12 is locked/);
+  assert.match(lockedStudio, /data-lock-409/);
+  assert.match(lockedStudio, /Ada Lovelace/);
+  assert.doesNotMatch(lockedStudio, /A new guest pays the full bid/);
+  assert.doesNotMatch(lockedStudio, /Same site: only the difference/);
+  assert.doesNotMatch(lockedStudio, /data-new-guest-polar-charge/);
+  assert.doesNotMatch(lockedStudio, /data-raiser-polar-charge/);
+  assert.doesNotMatch(lockedStudio, /data-raise-lead-usd/);
+  assert.doesNotMatch(lockedStudio, /data-live-listings/);
+  assert.doesNotMatch(lockedStudio, /Polar charges \$/);
+  assert.doesNotMatch(lockedStudio, /class="claim later-claim"/);
+  const lockedCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_live_claim_raise_lead&name=Too%20Late&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Locked.&bidUsd=13",
   });
   assert.equal(lockedCheckout.statusCode, 409);
   assert.match(lockedCheckout.body, /data-lock-409/);

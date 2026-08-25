@@ -215,6 +215,10 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-raise-amount],
 .studio.studio-open-empty[data-empty-honest] [data-raise-amount],
 .studio.studio-open-empty[data-empty-honest] [data-new-bid-usd],
+.studio.studio-open-empty[data-empty-honest] [data-new-guest-polar-charge],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-polar-charge],
+.studio.studio-open-empty[data-empty-honest] [data-raise-lead-usd],
+.studio.studio-open-empty[data-empty-honest] [data-live-listings],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
@@ -240,6 +244,10 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-claim-raise-amount],
 .studio.studio-open-empty [data-raise-amount],
 .studio.studio-open-empty [data-new-bid-usd],
+.studio.studio-open-empty [data-new-guest-polar-charge],
+.studio.studio-open-empty [data-raiser-polar-charge],
+.studio.studio-open-empty [data-raise-lead-usd],
+.studio.studio-open-empty [data-live-listings],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
@@ -688,6 +696,15 @@ export const OCCUPIED_CSS = /* css */ `
 }
 /* Occupied live: later-claim names Polar's full new bid for a new guest. Raise stays the difference. */
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-new-bid-usd] {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising. New guest still reads the full new bid. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raiser-polar-charge] {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raise-lead-usd] {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
