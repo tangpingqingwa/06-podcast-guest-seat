@@ -341,7 +341,13 @@ function renderClaim(input: {
       <p class="later-write-label">Then the guest site</p>
       ${identityFields}
     </div>`
-    : `${identityFields}
+    : occupiedLive
+      ? `<button type="submit" class="outbid"${disabled}>Outbid</button>
+    <div class="later-claim-identity" data-later-claim-identity>
+      <p class="later-claim-identity-label">Then name, site, one-liner</p>
+      ${identityFields}
+    </div>`
+      : `${identityFields}
     <button type="submit" class="outbid"${disabled}>Outbid</button>`;
   const claimClass = emptyClaimFirst
     ? "claim empty-claim-first"
