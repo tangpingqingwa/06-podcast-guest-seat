@@ -176,6 +176,7 @@ test("GET / with no episode keeps the claim visible; Polar cannot charge yet", a
   assert.doesNotMatch(body, /play count/i);
   assert.doesNotMatch(body, /followers/i);
   assert.doesNotMatch(studioMarkup(body), /data-empty-window/);
+  assert.doesNotMatch(studioMarkup(body), /data-empty-claim-window/);
   assert.doesNotMatch(studioMarkup(body), /Live rank is the rolling last 7 days from paidAt/);
   assert.match(body, /disabled/);
 });
@@ -3144,6 +3145,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.match(body, /Not Monday 00:00 UTC/);
   assert.match(body, /data-empty-window/);
   assert.match(body, /class="empty-window"/);
+  assert.match(body, /data-empty-claim-window/);
   assert.match(body, /Polar can charge/);
   assert.match(body, /name="episodeId" value="[^"]+"/);
   assert.match(body, /value="5"/);
@@ -3252,6 +3254,7 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.match(body, /Live rank is the rolling last 7 days from paidAt/);
   assert.match(body, /Not Monday 00:00 UTC/);
   assert.match(body, /data-empty-window/);
+  assert.match(body, /data-empty-claim-window/);
   assert.match(body, /First paid bid of at least \$5 takes #1/);
   assert.match(body, /No paid listings on this episode yet/);
   assert.match(body, /Host veto is on \(default on for guest seat\)/);
@@ -5088,6 +5091,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   assert.match(emptyStudio, /Host lock still freezes the episode/);
   assert.match(emptyStudio, /data-empty-window/);
   assert.match(emptyStudio, /class="empty-window"/);
+  assert.match(emptyStudio, /data-empty-claim-window/);
   assert.doesNotMatch(emptyStudio, /data-rolling-week/);
   assert.doesNotMatch(emptyStudio, /class="week-window"/);
   assert.doesNotMatch(emptyStudio, /Rolling last 7 days\. Not Monday 00:00 UTC\./);
@@ -5201,6 +5205,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   assert.match(occupied, /class="week-window"/);
   assert.doesNotMatch(occupied, /data-empty-window/);
   assert.doesNotMatch(occupied, /class="empty-window"/);
+  assert.doesNotMatch(occupied, /data-empty-claim-window/);
   assert.doesNotMatch(occupied, /Live rank is the rolling last 7 days from paidAt/);
   assert.match(occupied, /class="rundown"[^>]*data-rolling-week=""/);
   assert.match(occupied, /Ada Lovelace/);
@@ -5250,6 +5255,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   assert.match(expiredStudio, /Then the guest site/);
   assert.match(expiredStudio, /Live rank is the rolling last 7 days from paidAt/);
   assert.match(expiredStudio, /data-empty-window/);
+  assert.match(expiredStudio, /data-empty-claim-window/);
   assert.doesNotMatch(expiredStudio, /data-rolling-week/);
   assert.doesNotMatch(expiredStudio, /class="week-window"/);
   assert.doesNotMatch(expiredStudio, /Rolling last 7 days\. Not Monday 00:00 UTC\./);
@@ -5337,6 +5343,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   assert.doesNotMatch(lockedStudio, /data-rolling-week/);
   assert.doesNotMatch(lockedStudio, /Rolling last 7 days/);
   assert.doesNotMatch(lockedStudio, /data-empty-window/);
+  assert.doesNotMatch(lockedStudio, /data-empty-claim-window/);
   assert.doesNotMatch(lockedStudio, /Live rank is the rolling last 7 days from paidAt/);
   const lockedCheckout = await app.inject({
     method: "POST",
@@ -5387,7 +5394,8 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.ok(claimCopyAt > claimAt);
   assert.ok(laterWriteAt > claimCopyAt);
   assert.ok(windowAt > laterWriteAt);
-  assert.ok(rollingCopyAt > windowAt);
+  const slabRollingAt = studio.indexOf("Live rank is the rolling last 7 days from paidAt", windowAt);
+  assert.ok(slabRollingAt > windowAt);
   assert.ok(mondayAt > rollingCopyAt);
   assert.equal(guestClickAt, -1);
   assert.equal(weekChromeAt, -1);
@@ -5400,6 +5408,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.match(studio, /data-later-write/);
   assert.match(studio, /class="empty-window"/);
   assert.match(studio, /data-empty-window/);
+  assert.match(studio, /data-empty-claim-window/);
   assert.match(studio, /Live rank is the rolling last 7 days from paidAt/);
   assert.match(studio, /Not Monday 00:00 UTC/);
   assert.match(studio, /Host lock still freezes the episode/);
@@ -5408,6 +5417,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.match(studio, /data-claim-live/);
   assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-empty-window"), 1);
+  assert.equal(countExact(studio, "data-empty-claim-window"), 1);
   assert.equal(countExact(studio, 'data-first-click="claim"'), 1);
   assert.doesNotMatch(studio, /data-rolling-week/);
   assert.doesNotMatch(studio, /class="week-window"/);
@@ -5433,7 +5443,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.match(studioCss, /\.studio\.studio-open-empty \.week-window/);
   const emptyWindowCss = (
     studioCss.split("Empty open: name the fair occupied-rank window", 2)[1] ?? ""
-  ).split(".studio.studio-open-empty[data-empty-honest] [data-guest-prize]")[0] ?? "";
+  ).split("Empty open: claim-note names rolling last-7-days beside Claim #1")[0] ?? "";
   assert.match(emptyWindowCss, /color:\s*var\(--muted\)/);
   assert.match(emptyWindowCss, /font-family:\s*var\(--mono\)/);
   assert.doesNotMatch(emptyWindowCss, /background:/);
@@ -5474,6 +5484,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.doesNotMatch(occupied, /Claim #1 for/);
   assert.doesNotMatch(occupied, /data-empty-window/);
   assert.doesNotMatch(occupied, /class="empty-window"/);
+  assert.doesNotMatch(occupied, /data-empty-claim-window/);
   assert.doesNotMatch(occupied, /Live rank is the rolling last 7 days from paidAt/);
 
   const locked = await app.inject({
@@ -5492,6 +5503,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
   assert.match(lockedStudio, /data-lock-409/);
   assert.match(lockedStudio, /First Guest/);
   assert.doesNotMatch(lockedStudio, /data-empty-window/);
+  assert.doesNotMatch(lockedStudio, /data-empty-claim-window/);
   assert.doesNotMatch(lockedStudio, /Live rank is the rolling last 7 days from paidAt/);
   assert.doesNotMatch(lockedStudio, /data-rolling-week/);
   const lockedCheckout = await app.inject({
@@ -5503,6 +5515,200 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
     },
     payload:
       "episodeId=ep_empty_rolling_copy&name=Too%20Late&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Locked.&bidUsd=13",
+  });
+  assert.equal(lockedCheckout.statusCode, 409);
+  assert.match(lockedCheckout.body, /episode_locked/);
+});
+
+test("GET / on a fresh-open empty episode names rolling last-7-days on the claim-note beside Claim #1", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_empty_claim_window",
+    showId: "show_english",
+    label: "Episode 1",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const response = await app.inject({ method: "GET", url: "/" });
+  assert.equal(response.statusCode, 200);
+  const body = response.body;
+  const studio = studioMarkup(body);
+  const claimAt = studio.indexOf('id="claim"');
+  const firstClickAt = studio.indexOf('data-first-click="claim"');
+  const claimCopyAt = studio.indexOf("Claim #1 for");
+  const claimNoteAt = studio.indexOf('class="claim-note"');
+  const claimWindowAt = studio.indexOf("data-empty-claim-window");
+  const rollingCopyAt = studio.indexOf("Live rank is the rolling last 7 days from paidAt");
+  const mondayAt = studio.indexOf("Not Monday 00:00 UTC");
+  const lockCopyAt = studio.indexOf("Host lock still freezes the episode");
+  const outbidAt = studio.indexOf(">Outbid</button>");
+  const laterWriteAt = studio.indexOf("Then the guest site");
+  const windowAt = studio.indexOf("data-empty-window");
+  const guestClickAt = studio.indexOf('data-first-click="guest"');
+  const weekChromeAt = studio.indexOf("data-rolling-week");
+  const weekClassAt = studio.indexOf('class="week-window"');
+  const lockAt = studio.indexOf("data-host-lock");
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(firstClickAt, -1);
+  assert.notEqual(claimCopyAt, -1);
+  assert.notEqual(claimNoteAt, -1);
+  assert.notEqual(claimWindowAt, -1);
+  assert.notEqual(rollingCopyAt, -1);
+  assert.notEqual(mondayAt, -1);
+  assert.notEqual(lockCopyAt, -1);
+  assert.notEqual(outbidAt, -1);
+  assert.notEqual(laterWriteAt, -1);
+  assert.notEqual(windowAt, -1);
+  assert.ok(firstClickAt > claimAt);
+  assert.ok(claimCopyAt > firstClickAt);
+  assert.ok(claimNoteAt > claimCopyAt);
+  assert.ok(claimWindowAt > claimNoteAt);
+  assert.ok(rollingCopyAt > claimWindowAt);
+  assert.ok(mondayAt > rollingCopyAt);
+  assert.ok(lockCopyAt > mondayAt);
+  assert.ok(outbidAt > lockCopyAt);
+  assert.ok(laterWriteAt > outbidAt);
+  assert.ok(windowAt > laterWriteAt);
+  const slabRollingAt = studio.indexOf("Live rank is the rolling last 7 days from paidAt", windowAt);
+  assert.ok(slabRollingAt > windowAt);
+  assert.equal(guestClickAt, -1);
+  assert.equal(weekChromeAt, -1);
+  assert.equal(weekClassAt, -1);
+  assert.equal(lockAt, -1);
+  assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.match(studio, /Claim #1 for/);
+  assert.match(studio, /class="claim empty-claim-first"/);
+  assert.match(studio, /data-first-click="claim"/);
+  assert.match(studio, /Then the guest site/);
+  assert.match(studio, /data-later-write/);
+  assert.match(studio, /class="claim-note"/);
+  assert.match(studio, /data-empty-claim-window/);
+  assert.match(studio, /Live rank is the rolling last 7 days from paidAt/);
+  assert.match(studio, /Not Monday 00:00 UTC/);
+  assert.match(studio, /Host lock still freezes the episode/);
+  assert.match(studio, /\$5 takes #1/);
+  assert.match(studio, /The guest seat is open/);
+  assert.match(studio, /Polar can charge/);
+  assert.match(studio, /class="empty-window"/);
+  assert.match(studio, /data-empty-window/);
+  assert.match(studio, /data-open-seat/);
+  assert.match(studio, /data-claim-live/);
+  assert.match(studio, />Outbid<\/button>/);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
+  assert.equal(countExact(studio, "data-empty-claim-window"), 1);
+  assert.equal(countExact(studio, "data-empty-window"), 1);
+  assert.equal(countExact(studio, "Live rank is the rolling last 7 days from paidAt"), 2);
+  assert.equal(countExact(studio, 'data-first-click="claim"'), 1);
+  assert.doesNotMatch(studio, /data-rolling-week/);
+  assert.doesNotMatch(studio, /class="week-window"/);
+  assert.doesNotMatch(studio, /Rolling last 7 days\. Not Monday 00:00 UTC\./);
+  assert.doesNotMatch(studio, /data-rundown/);
+  assert.doesNotMatch(studio, /data-guest-prize/);
+  assert.doesNotMatch(studio, /data-later-claim/);
+  assert.doesNotMatch(studio, /studio-open-occupied/);
+  assert.doesNotMatch(studio, /data-claim-locked/);
+  assert.doesNotMatch(studio, /data-host-lock/);
+  assert.doesNotMatch(studio, /24h lock/);
+  assert.doesNotMatch(studio, /lock-after-open-six/);
+  assert.doesNotMatch(studio, /empty-window-after/);
+  assert.doesNotMatch(studio, /data-empty-rolling-after/);
+  assert.doesNotMatch(studio, /empty-claim-window-after/);
+  assert.doesNotMatch(studio, /data-empty-claim-after/);
+  assert.doesNotMatch(studio, /claim-window-after/);
+  assert.doesNotMatch(body, /featured guest/i);
+  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
+  assert.match(studioCss, /Empty open: claim-note names rolling last-7-days beside Claim #1/);
+  assert.match(
+    studioCss,
+    /\.studio\.studio-open-empty\[data-empty-honest\] \.claim\.empty-claim-first\[data-empty-claim-first\] \.claim-note\[data-empty-claim-window\]/,
+  );
+  assert.match(studioCss, /Empty open: name the fair occupied-rank window/);
+  assert.match(
+    studioCss,
+    /\.studio\.studio-open-empty\[data-empty-honest\] \.empty\.open-seat\[data-empty-honest\] \.empty-window\[data-empty-window\]/,
+  );
+  assert.match(studioCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-rolling-week\]/);
+  assert.match(studioCss, /\.studio\.studio-open-empty \.week-window/);
+  const claimWindowCss = (
+    studioCss.split("Empty open: claim-note names rolling last-7-days beside Claim #1", 2)[1] ?? ""
+  ).split(".studio.studio-open-empty[data-empty-honest] [data-guest-prize]")[0] ?? "";
+  assert.match(claimWindowCss, /color:\s*var\(--muted\)/);
+  assert.doesNotMatch(claimWindowCss, /background:/);
+  assert.doesNotMatch(claimWindowCss, /var\(--lamp\)/);
+  assert.doesNotMatch(claimWindowCss, /var\(--on-air\)/);
+  assert.doesNotMatch(claimWindowCss, /\.week-window/);
+  assert.doesNotMatch(claimWindowCss, /data-rolling-week/);
+  assert.doesNotMatch(
+    studioCss,
+    /\.studio\.studio-open-occupied \.rundown\[data-rolling-week\] \.week-window\[data-rolling-week\]/,
+  );
+
+  const checkout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_empty_claim_window&name=First%20Guest&siteUrl=https%3A%2F%2Ffirst.example%2F&oneLiner=First%20bid%20on%20a%20live%20seat.&bidUsd=5",
+  });
+  assert.equal(checkout.statusCode, 303);
+  const location = String(checkout.headers.location ?? "");
+  assert.match(location, /\/checkout\/complete\?checkoutId=/);
+  assert.doesNotMatch(checkout.body, /episode_locked/);
+
+  const complete = await app.inject({ method: "GET", url: location });
+  assert.equal(complete.statusCode, 303);
+
+  const occupiedBoard = await app.inject({ method: "GET", url: "/" });
+  const occupied = studioMarkup(occupiedBoard.body);
+  assert.match(occupied, /class="studio studio-open-occupied"/);
+  assert.match(occupied, /Rolling last 7 days\. Not Monday 00:00 UTC\./);
+  assert.match(occupied, /class="week-window"/);
+  assert.match(occupied, /data-rolling-week=""/);
+  assert.match(occupied, /data-first-click="guest"/);
+  assert.match(occupied, /data-host-lock/);
+  assert.match(occupied, /First Guest/);
+  assert.match(occupied, /class="claim later-claim"/);
+  assert.doesNotMatch(occupied, /Claim #1 for/);
+  assert.doesNotMatch(occupied, /Then the guest site/);
+  assert.doesNotMatch(occupied, /data-first-click="claim"/);
+  assert.doesNotMatch(occupied, /data-empty-claim-window/);
+  assert.doesNotMatch(occupied, /data-empty-window/);
+  assert.doesNotMatch(occupied, /class="empty-window"/);
+  assert.doesNotMatch(occupied, /Live rank is the rolling last 7 days from paidAt/);
+
+  const locked = await app.inject({
+    method: "POST",
+    url: "/host/lock",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload: `episodeId=ep_empty_claim_window&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
+  });
+  assert.equal(locked.statusCode, 303);
+  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const lockedStudio = studioMarkup(afterLock.body);
+  assert.match(lockedStudio, /Episode 1 is locked/);
+  assert.match(lockedStudio, /data-lock-409/);
+  assert.match(lockedStudio, /First Guest/);
+  assert.doesNotMatch(lockedStudio, /data-empty-claim-window/);
+  assert.doesNotMatch(lockedStudio, /data-empty-window/);
+  assert.doesNotMatch(lockedStudio, /Live rank is the rolling last 7 days from paidAt/);
+  assert.doesNotMatch(lockedStudio, /data-rolling-week/);
+  const lockedCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_empty_claim_window&name=Too%20Late&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Locked.&bidUsd=13",
   });
   assert.equal(lockedCheckout.statusCode, 409);
   assert.match(lockedCheckout.body, /episode_locked/);
@@ -5546,6 +5752,7 @@ test("unpaid stays off the rundown — No #1 guest until Polar reports paid", as
   assert.match(leftoverStudio, /No paid listings/);
   assert.match(leftoverStudio, /Live rank is the rolling last 7 days from paidAt/);
   assert.match(leftoverStudio, /data-empty-window/);
+  assert.match(leftoverStudio, /data-empty-claim-window/);
   assert.doesNotMatch(leftoverStudio, /data-rolling-week/);
   assert.doesNotMatch(leftoverStudio, /class="week-window"/);
   assert.doesNotMatch(leftoverStudio, /Ghost Guest/);
