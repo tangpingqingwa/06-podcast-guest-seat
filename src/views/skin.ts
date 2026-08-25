@@ -197,6 +197,10 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
   letter-spacing: 0.02em;
   color: var(--muted);
 }
+/* Empty open: claim-note names rolling last-7-days beside Claim #1. Not Monday 00:00 UTC. Occupied week-window chrome stays off. */
+.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .claim-note[data-empty-claim-window] {
+  color: var(--muted);
+}
 .studio.studio-open-empty[data-empty-honest] [data-guest-prize],
 .studio.studio-open-empty[data-empty-honest] [data-first-click="guest"],
 .studio.studio-open-empty[data-empty-honest] [data-later-seat],

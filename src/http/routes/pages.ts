@@ -279,6 +279,9 @@ function vetoNote(episode: Episode): string {
   return `Host veto is ${state}${guestDefault}.`;
 }
 
+const EMPTY_ROLLING_WINDOW_COPY =
+  "Live rank is the rolling last 7 days from paidAt. Not Monday 00:00 UTC. Host lock still freezes the episode.";
+
 function renderLockedClaim(episode: Episode): string {
   const label = escapeHtml(episode.label);
   return `<section class="claim lock-after-open-first lock-after-open-two lock-after-open-three lock-after-open-four lock-after-open-five" id="claim" data-claim-locked data-lock-certain data-lock-409 data-lock-after-open data-lock-after-open-first data-lock-after-open-two data-lock-after-open-three data-lock-after-open-four data-lock-after-open-five>
@@ -306,9 +309,9 @@ function renderClaim(input: {
   const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : nextSeat
-      ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${vetoNote(episode)}`
+      ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${EMPTY_ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
       : openEmpty
-        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${vetoNote(episode)}`
+        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${EMPTY_ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
         : `Rank is the bid. ${vetoNote(episode)}`;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
@@ -351,6 +354,7 @@ function renderClaim(input: {
       ? " data-later-claim"
       : "";
   const titleMarks = emptyClaimFirst ? ' data-empty-claim data-first-click="claim"' : "";
+  const claimWindow = emptyClaimFirst ? " data-empty-claim-window" : "";
   return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title"${titleMarks}>
     <span>${title}</span>
@@ -363,7 +367,7 @@ function renderClaim(input: {
       <button type="button" class="step" data-bid-step="1" aria-label="Increase bid by one dollar"${disabled}>+</button>
     </span>
   </h1>
-  <p class="claim-note">${note}</p>
+  <p class="claim-note"${claimWindow}>${note}</p>
   <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
     ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
     ${bidForm}
@@ -391,7 +395,7 @@ function renderOpenEmptyRundown(episode: Episode, nextSeat = false): string {
   return `<section class="empty open-seat" data-empty-board data-open-seat data-empty-honest${nextSeat ? " data-next-seat" : ""}>
   <p class="empty-kicker">${kicker}</p>
   <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
-  <p class="empty-window" data-empty-window>Live rank is the rolling last 7 days from paidAt. Not Monday 00:00 UTC. Host lock still freezes the episode.</p>
+  <p class="empty-window" data-empty-window>${EMPTY_ROLLING_WINDOW_COPY}</p>
   <p>${body}</p>
 </section>`;
 }
