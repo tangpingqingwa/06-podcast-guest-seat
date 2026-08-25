@@ -391,6 +391,7 @@ function renderOpenEmptyRundown(episode: Episode, nextSeat = false): string {
   return `<section class="empty open-seat" data-empty-board data-open-seat data-empty-honest${nextSeat ? " data-next-seat" : ""}>
   <p class="empty-kicker">${kicker}</p>
   <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
+  <p class="empty-window" data-empty-window>Live rank is the rolling last 7 days from paidAt. Not Monday 00:00 UTC. Host lock still freezes the episode.</p>
   <p>${body}</p>
 </section>`;
 }

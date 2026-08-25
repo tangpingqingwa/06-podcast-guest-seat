@@ -189,6 +189,14 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .empty[data-empty-honest] .empty-lead {
   letter-spacing: -0.03em;
 }
+/* Empty open: name the fair occupied-rank window. Not Monday 00:00 UTC. Occupied week-window chrome stays off. */
+.studio.studio-open-empty[data-empty-honest] .empty.open-seat[data-empty-honest] .empty-window[data-empty-window] {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
 .studio.studio-open-empty[data-empty-honest] [data-guest-prize],
 .studio.studio-open-empty[data-empty-honest] [data-first-click="guest"],
 .studio.studio-open-empty[data-empty-honest] [data-later-seat],
