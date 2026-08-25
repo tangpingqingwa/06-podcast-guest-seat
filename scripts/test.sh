@@ -315,6 +315,24 @@ if [[ -f package.json ]]; then
     || fail "occupied later-claim raiser Polar-charge CSS must be scoped to occupied dashed \$amount"
   grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raise-lead-usd]' src/views/skin.ts \
     || fail "occupied later-claim raise-lead CSS must be scoped to occupied dashed \$amount"
+  grep -q 'data-new-guest-claim-note' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing new-guest claim-note until a site is entered"
+  grep -q 'data-raiser-claim-note' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing raiser claim-note after the same site is entered"
+  grep -q 'data-raiser-claim-usd' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing raise-difference amount on the claim-note"
+  grep -q 'data-claim-note-lead' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing claim-note lead so a raiser is not told they pay a new bid"
+  grep -q 'the raise difference, not a full bid' src/http/routes/pages.ts \
+    || fail "occupied later-claim must name the raise difference without telling a raiser they pay a new bid"
+  grep -q 'Occupied live: later-claim note names the raise difference after the same site is entered' src/views/skin.ts \
+    || fail "occupied CSS must document later-claim note naming the raise difference after the same site"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-new-guest-claim-note]' src/views/skin.ts \
+    || fail "occupied later-claim new-guest note CSS must be scoped to occupied later-claim"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-note]' src/views/skin.ts \
+    || fail "occupied later-claim raiser note CSS must be scoped to occupied later-claim"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-usd]' src/views/skin.ts \
+    || fail "occupied later-claim raiser note amount CSS must be scoped to occupied later-claim"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-identity"
   grep -F -q '.studio.studio-open-empty [data-later-claim-identity]' src/views/skin.ts \
@@ -349,6 +367,22 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied raise-lead-usd"
   grep -F -q '.studio.studio-open-empty [data-raise-lead-usd]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied raise-lead-usd without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-guest-claim-note]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-guest claim-note"
+  grep -F -q '.studio.studio-open-empty [data-new-guest-claim-note]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-guest claim-note without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-note]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser claim-note"
+  grep -F -q '.studio.studio-open-empty [data-raiser-claim-note]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser claim-note without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser-claim-usd"
+  grep -F -q '.studio.studio-open-empty [data-raiser-claim-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser-claim-usd without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-claim-note-lead]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied claim-note-lead"
+  grep -F -q '.studio.studio-open-empty [data-claim-note-lead]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied claim-note-lead without stamp-only"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-live-listings]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied live-listings"
   grep -F -q '.studio.studio-open-empty [data-live-listings]' src/views/skin.ts \
@@ -362,7 +396,7 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied later-claim-window"
   grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after|later-claim-raise-lead-after|occupied-raise-lead-after|raise-lead-after-outbid|later-claim-raise-lead-N|occupied-raise-lead-N' \
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after|later-claim-raise-lead-after|occupied-raise-lead-after|raise-lead-after-outbid|later-claim-raise-lead-N|occupied-raise-lead-N|later-claim-note-raise-after|occupied-claim-note-after|claim-note-raise-after|later-claim-note-after|occupied-note-raise-after|claim-note-lead-after' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; name rolling last-7-days on empty copy"
   fi
@@ -763,6 +797,8 @@ if [[ -f package.json ]]; then
     || fail "occupied later-claim dashed \$amount raise difference test did not run"
   grep -q 'GET / on occupied live names Polar' "$test_log" \
     || fail "occupied later-claim new-guest full bid test did not run"
+  grep -q 'later-claim note names the raise difference after the same site' "$test_log" \
+    || fail "occupied later-claim note raise-difference after same site test did not run"
   grep -q 'rolling last-7-days window is 7' "$test_log" \
     || fail "rolling last-7-days window math test did not run"
   grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \

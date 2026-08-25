@@ -346,14 +346,27 @@ function renderClaim(input: {
   const seat = episode ? seatLabel(episode.seatKind) : "guest seat";
   const openEmpty = Boolean(episode && input.canCharge && input.emptyBoard);
   const nextSeat = Boolean(openEmpty && input.nextSeat && episode);
+  const occupiedLive = Boolean(episode && input.canCharge && !input.emptyBoard);
   const label = episode ? escapeHtml(episode.label) : "";
+  const topUsd = input.topUsd;
+  const raiseChargeUsd =
+    occupiedLive && topUsd !== undefined && topUsd > 0
+      ? Math.max(0, input.defaultBid - topUsd)
+      : undefined;
+  const occupiedRaiserNote =
+    raiseChargeUsd !== undefined
+      ? `You pay $<span data-raiser-claim-usd>${raiseChargeUsd}</span>. Same site: the raise difference, not a full bid.`
+      : "You pay the raise difference, not a full bid.";
+  const occupiedNote = episode
+    ? `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} <span data-new-guest-claim-note>A new guest pays the full bid. Same site raises. You pay only the difference.</span><span data-raiser-claim-note hidden>${occupiedRaiserNote}</span>`
+    : "";
   const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : nextSeat
       ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
       : openEmpty
         ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
-        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} A new guest pays the full bid. Same site raises. You pay only the difference.`;
+        : occupiedNote;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
     : nextSeat
@@ -367,7 +380,6 @@ function renderClaim(input: {
   const honest = openEmpty ? " data-empty-honest" : "";
   const nextMark = nextSeat ? " data-next-seat" : "";
   const emptyClaimFirst = openEmpty;
-  const occupiedLive = Boolean(episode && input.canCharge && !input.emptyBoard);
   const title = emptyClaimFirst
     ? "Claim #1 for"
     : `Claim the ${escapeHtml(seat)} for`;
@@ -406,12 +418,8 @@ function renderClaim(input: {
     : occupiedLive
       ? " data-later-claim-window"
       : "";
+  const claimNoteLead = occupiedLive ? ' data-claim-note-lead="new"' : "";
   const claimRaise = occupiedLive ? " data-later-claim-raise" : "";
-  const topUsd = input.topUsd;
-  const raiseChargeUsd =
-    occupiedLive && topUsd !== undefined && topUsd > 0
-      ? Math.max(0, input.defaultBid - topUsd)
-      : undefined;
   const liveListingsJson =
     occupiedLive && input.liveListings && input.liveListings.length > 0
       ? escapeHtml(JSON.stringify(input.liveListings))
@@ -439,7 +447,7 @@ function renderClaim(input: {
       <button type="button" class="step" data-bid-step="1" aria-label="Increase bid by one dollar"${disabled}>+</button>
     </span>
   </h1>
-  <p class="claim-note"${claimWindow}${claimRaise}>${note}</p>
+  <p class="claim-note"${claimWindow}${claimNoteLead}${claimRaise}>${note}</p>
   <form id="bid-form" class="bid-form" method="post" action="/checkout"${input.canCharge ? "" : ' aria-disabled="true"'}>
     ${episode && input.canCharge ? `<input type="hidden" name="episodeId" value="${escapeHtml(episode.id)}"/>` : ""}
     ${bidForm}
@@ -645,6 +653,10 @@ ${studio}
     var newGuestCharge = document.querySelector("[data-new-guest-polar-charge]");
     var raiserCharge = document.querySelector("[data-raiser-polar-charge]");
     var polarLead = document.querySelector("[data-polar-lead]");
+    var newGuestNote = document.querySelector("[data-new-guest-claim-note]");
+    var raiserNote = document.querySelector("[data-raiser-claim-note]");
+    var raiserClaimUsd = document.querySelector("[data-raiser-claim-usd]");
+    var claimNoteLead = document.querySelector("[data-claim-note-lead]");
     var bidField = document.querySelector("[data-later-claim-raise-amount]");
     var siteInput = document.querySelector('input[name="siteUrl"]');
     var listings = [];
@@ -682,15 +694,13 @@ ${studio}
       }
       var existing = existingBid();
       var raising = Number.isFinite(existing);
-      if (raiseLeadUsd) {
-        raiseLeadUsd.textContent = String(
-          raising
-            ? Math.max(0, next - existing)
-            : Number.isFinite(current) && next > current
-              ? next - current
-              : 0,
-        );
-      }
+      var difference = raising
+        ? Math.max(0, next - existing)
+        : Number.isFinite(current) && next > current
+          ? next - current
+          : 0;
+      if (raiseLeadUsd) raiseLeadUsd.textContent = String(difference);
+      if (raiserClaimUsd) raiserClaimUsd.textContent = String(difference);
       if (newGuestCharge) {
         if (raising) newGuestCharge.setAttribute("hidden", "");
         else newGuestCharge.removeAttribute("hidden");
@@ -700,6 +710,15 @@ ${studio}
         else raiserCharge.setAttribute("hidden", "");
       }
       if (polarLead) polarLead.setAttribute("data-polar-lead", raising ? "raise" : "new");
+      if (newGuestNote) {
+        if (raising) newGuestNote.setAttribute("hidden", "");
+        else newGuestNote.removeAttribute("hidden");
+      }
+      if (raiserNote) {
+        if (raising) raiserNote.removeAttribute("hidden");
+        else raiserNote.setAttribute("hidden", "");
+      }
+      if (claimNoteLead) claimNoteLead.setAttribute("data-claim-note-lead", raising ? "raise" : "new");
     }
     document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
       btn.addEventListener("click", function () {
