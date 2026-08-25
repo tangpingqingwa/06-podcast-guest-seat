@@ -218,6 +218,10 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-new-guest-polar-charge],
 .studio.studio-open-empty[data-empty-honest] [data-raiser-polar-charge],
 .studio.studio-open-empty[data-empty-honest] [data-raise-lead-usd],
+.studio.studio-open-empty[data-empty-honest] [data-new-guest-claim-note],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-note],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-usd],
+.studio.studio-open-empty[data-empty-honest] [data-claim-note-lead],
 .studio.studio-open-empty[data-empty-honest] [data-live-listings],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
@@ -247,6 +251,10 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-new-guest-polar-charge],
 .studio.studio-open-empty [data-raiser-polar-charge],
 .studio.studio-open-empty [data-raise-lead-usd],
+.studio.studio-open-empty [data-new-guest-claim-note],
+.studio.studio-open-empty [data-raiser-claim-note],
+.studio.studio-open-empty [data-raiser-claim-usd],
+.studio.studio-open-empty [data-claim-note-lead],
 .studio.studio-open-empty [data-live-listings],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
@@ -723,6 +731,17 @@ export const OCCUPIED_CSS = /* css */ `
 }
 /* Occupied live: later-claim names the raise difference beside Outbid. Polar raise = difference. Empty claim-note stays off. */
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] {
+  color: var(--muted);
+}
+/* Occupied live: later-claim note names the raise difference after the same site is entered. New guest still reads the full bid. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-new-guest-claim-note] {
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-note] {
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-usd] {
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 /* Occupied live: later-claim identity is a later write after Outbid. Empty later-write stays off. */
