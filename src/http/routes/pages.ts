@@ -403,7 +403,7 @@ function renderClaim(input: {
       ${identityFields}
     </div>`
     : occupiedLive
-      ? `<button type="submit" class="outbid"${disabled}>Outbid</button>
+      ? `<button type="submit" class="outbid"${disabled} data-later-claim-outbid>Outbid<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name></span></span></button>
     <div class="later-claim-identity" data-later-claim-identity>
       <p class="later-claim-identity-label">Then name, site, one-liner</p>
       ${identityFields}
@@ -674,6 +674,8 @@ ${studio}
     var bidField = document.querySelector("[data-later-claim-raise-amount]");
     var raiserGuests = document.querySelectorAll("[data-raiser-guest]");
     var raiserGuestNames = document.querySelectorAll("[data-raiser-guest-name]");
+    var outbidGuest = document.querySelector("[data-raiser-outbid-guest]");
+    var outbidGuestName = document.querySelector("[data-raiser-outbid-guest-name]");
     var siteInput = document.querySelector('input[name="siteUrl"]');
     var listings = [];
     try {
@@ -727,6 +729,11 @@ ${studio}
         if (raising) el.removeAttribute("hidden");
         else el.setAttribute("hidden", "");
       });
+      if (outbidGuestName) outbidGuestName.textContent = guestName;
+      if (outbidGuest) {
+        if (raising) outbidGuest.removeAttribute("hidden");
+        else outbidGuest.setAttribute("hidden", "");
+      }
       if (newGuestCharge) {
         if (raising) newGuestCharge.setAttribute("hidden", "");
         else newGuestCharge.removeAttribute("hidden");
