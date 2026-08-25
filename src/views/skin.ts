@@ -229,6 +229,9 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-form-hint-lead],
 .studio.studio-open-empty[data-empty-honest] [data-raiser-guest],
 .studio.studio-open-empty[data-empty-honest] [data-raiser-guest-name],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim-outbid],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-outbid-guest],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-outbid-guest-name],
 .studio.studio-open-empty[data-empty-honest] [data-live-listings],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
@@ -269,6 +272,9 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-form-hint-lead],
 .studio.studio-open-empty [data-raiser-guest],
 .studio.studio-open-empty [data-raiser-guest-name],
+.studio.studio-open-empty [data-later-claim-outbid],
+.studio.studio-open-empty [data-raiser-outbid-guest],
+.studio.studio-open-empty [data-raiser-outbid-guest-name],
 .studio.studio-open-empty [data-live-listings],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
@@ -738,6 +744,14 @@ export const OCCUPIED_CSS = /* css */ `
   height: 2.35rem;
   font-size: 0.92rem;
   font-weight: 600;
+}
+/* Occupied live: later-claim Outbid names the matched guest after the same site is entered. Polar / claim-note / form-hint Raising copy stays. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .outbid[data-later-claim-outbid] [data-raiser-outbid-guest] {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .outbid[data-later-claim-outbid] [data-raiser-outbid-guest-name] {
+  font-weight: 700;
 }
 /* Occupied live: later-claim names rolling last-7-days beside Outbid. Not Monday 00:00 UTC. Empty claim-window stays off. */
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window] {
