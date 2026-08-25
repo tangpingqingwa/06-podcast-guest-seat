@@ -209,6 +209,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-facts],
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim-window],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
@@ -228,6 +229,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-facts],
 .studio.studio-open-empty [data-later-fact],
 .studio.studio-open-empty [data-later-claim],
+.studio.studio-open-empty [data-later-claim-window],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
@@ -658,6 +660,10 @@ export const OCCUPIED_CSS = /* css */ `
   height: 2.35rem;
   font-size: 0.92rem;
   font-weight: 600;
+}
+/* Occupied live: later-claim names rolling last-7-days beside Outbid. Not Monday 00:00 UTC. Empty claim-window stays off. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window] {
+  color: var(--muted);
 }
 /* Occupied live: rolling last-7-days window. Not a civil-midnight lock. */
 .studio.studio-open-occupied .rundown[data-rolling-week] .week-window[data-rolling-week] {

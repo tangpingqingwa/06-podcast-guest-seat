@@ -279,7 +279,7 @@ function vetoNote(episode: Episode): string {
   return `Host veto is ${state}${guestDefault}.`;
 }
 
-const EMPTY_ROLLING_WINDOW_COPY =
+const ROLLING_WINDOW_COPY =
   "Live rank is the rolling last 7 days from paidAt. Not Monday 00:00 UTC. Host lock still freezes the episode.";
 
 function renderLockedClaim(episode: Episode): string {
@@ -309,10 +309,10 @@ function renderClaim(input: {
   const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
     : nextSeat
-      ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${EMPTY_ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
+      ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
       : openEmpty
-        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${EMPTY_ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
-        : `Rank is the bid. ${vetoNote(episode)}`;
+        ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
+        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
     : nextSeat
@@ -354,7 +354,11 @@ function renderClaim(input: {
       ? " data-later-claim"
       : "";
   const titleMarks = emptyClaimFirst ? ' data-empty-claim data-first-click="claim"' : "";
-  const claimWindow = emptyClaimFirst ? " data-empty-claim-window" : "";
+  const claimWindow = emptyClaimFirst
+    ? " data-empty-claim-window"
+    : occupiedLive
+      ? " data-later-claim-window"
+      : "";
   return `<section class="${claimClass}" id="claim"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title"${titleMarks}>
     <span>${title}</span>
@@ -395,7 +399,7 @@ function renderOpenEmptyRundown(episode: Episode, nextSeat = false): string {
   return `<section class="empty open-seat" data-empty-board data-open-seat data-empty-honest${nextSeat ? " data-next-seat" : ""}>
   <p class="empty-kicker">${kicker}</p>
   <p class="empty-lead">$${MIN_BID_USD} takes #1.</p>
-  <p class="empty-window" data-empty-window>${EMPTY_ROLLING_WINDOW_COPY}</p>
+  <p class="empty-window" data-empty-window>${ROLLING_WINDOW_COPY}</p>
   <p>${body}</p>
 </section>`;
 }

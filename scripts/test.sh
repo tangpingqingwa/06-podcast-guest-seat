@@ -261,7 +261,17 @@ if [[ -f package.json ]]; then
     || fail "empty-open CSS must document claim-note rolling last-7-days beside Claim #1"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .claim-note[data-empty-claim-window]' src/views/skin.ts \
     || fail "empty-open claim-note rolling-window CSS must be scoped to empty Claim #1"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after' \
+  grep -q 'data-later-claim-window' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing data-later-claim-window rolling last-7-days certainty"
+  grep -q 'Occupied live: later-claim names rolling last-7-days beside Outbid' src/views/skin.ts \
+    || fail "occupied CSS must document later-claim rolling last-7-days beside Outbid"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window]' src/views/skin.ts \
+    || fail "occupied later-claim rolling-window CSS must be scoped to occupied later-claim"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-window]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim-window"
+  grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; name rolling last-7-days on empty copy"
   fi
@@ -652,6 +662,8 @@ if [[ -f package.json ]]; then
     || fail "empty-open rolling last-7-days copy test did not run"
   grep -q 'GET / on a fresh-open empty episode names rolling last-7-days on the claim-note' "$test_log" \
     || fail "empty-open claim-note rolling last-7-days test did not run"
+  grep -q 'GET / on occupied live names rolling last-7-days on later-claim' "$test_log" \
+    || fail "occupied later-claim rolling last-7-days test did not run"
   grep -q 'rolling last-7-days window is 7' "$test_log" \
     || fail "rolling last-7-days window math test did not run"
   grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \
