@@ -214,6 +214,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-raise],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-raise-amount],
 .studio.studio-open-empty[data-empty-honest] [data-raise-amount],
+.studio.studio-open-empty[data-empty-honest] [data-new-bid-usd],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
@@ -238,6 +239,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-claim-raise],
 .studio.studio-open-empty [data-later-claim-raise-amount],
 .studio.studio-open-empty [data-raise-amount],
+.studio.studio-open-empty [data-new-bid-usd],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
@@ -682,6 +684,11 @@ export const OCCUPIED_CSS = /* css */ `
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+/* Occupied live: later-claim names Polar's full new bid for a new guest. Raise stays the difference. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-new-bid-usd] {
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .step {

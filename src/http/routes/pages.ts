@@ -313,14 +313,14 @@ function renderClaim(input: {
       ? `Rank is the bid. ${label} is open. Polar can charge. $${MIN_BID_USD} takes #1 on this empty board. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
       : openEmpty
         ? `Rank is the bid. The ${seat} is open. Polar can charge. $${MIN_BID_USD} takes #1. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
-        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} You pay only the difference.`;
+        : `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} A new guest pays the full bid. Same site raises. You pay only the difference.`;
   const hint = !episode
     ? "No seat is for sale until the host opens an episode."
     : nextSeat
       ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
       : openEmpty
         ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
-        : "Already on this episode? Enter the same site and raise. You pay only the difference.";
+        : "A new guest pays the full bid. Already on this episode? Enter the same site and raise. You pay only the difference.";
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
@@ -375,9 +375,9 @@ function renderClaim(input: {
   const bidField =
     raiseChargeUsd !== undefined && topUsd !== undefined
       ? `<label class="bid-field" data-later-claim-raise-amount>
-        <span class="sr-only">New total in dollars. Polar charges the raise difference.</span>
+        <span class="sr-only">New total in dollars. Polar charges the full new bid. Same site: the raise difference.</span>
         <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}"${disabled}/></span>
-        <span class="raise-amount" data-raise-amount>Polar charges $<span data-raise-amount-usd>${raiseChargeUsd}</span></span>
+        <span class="raise-amount" data-raise-amount>Polar charges $<span data-new-bid-usd>${input.defaultBid}</span> new. Raise $<span data-raise-amount-usd>${raiseChargeUsd}</span></span>
       </label>`
       : `<label class="bid-field">
         <span class="sr-only">Amount in dollars</span>
@@ -592,9 +592,11 @@ ${studio}
     }
     var current = parseInt(String(input.getAttribute("data-current-usd") || ""), 10);
     var chargeUsd = document.querySelector("[data-raise-amount-usd]");
+    var newBidUsd = document.querySelector("[data-new-bid-usd]");
     function syncCharge() {
-      if (!chargeUsd || !Number.isFinite(current)) return;
       var next = parseBid(input.value);
+      if (newBidUsd) newBidUsd.textContent = String(next);
+      if (!chargeUsd || !Number.isFinite(current)) return;
       chargeUsd.textContent = String(next > current ? next - current : 0);
     }
     document.querySelectorAll("[data-bid-step]").forEach(function (btn) {
