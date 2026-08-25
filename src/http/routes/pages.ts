@@ -118,6 +118,7 @@ export function boardRows(
 export type LiveListingRef = {
   identity: string;
   bidUsd: number;
+  name?: string;
 };
 
 /** Occupied live listings a returning guest can raise. Vetoed rows are not a raise. */
@@ -127,6 +128,7 @@ function liveListingRefs(rows: readonly BoardRow[]): LiveListingRef[] {
     .map((row) => ({
       identity: siteIdentity(row.siteUrl),
       bidUsd: row.bidUsd,
+      name: row.name,
     }));
 }
 
@@ -361,8 +363,10 @@ function renderClaim(input: {
     raiseChargeUsd !== undefined
       ? `Already on this episode: you pay $<span data-raiser-form-hint-usd>${raiseChargeUsd}</span>, the raise difference.`
       : "Already on this episode: you pay the raise difference.";
+  const occupiedRaiserGuest =
+    '<span data-raiser-guest hidden> Raising <span data-raiser-guest-name></span>.</span>';
   const occupiedNote = episode
-    ? `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} <span data-new-guest-claim-note>A new guest pays the full bid. Same site raises. You pay only the difference.</span><span data-raiser-claim-note hidden>${occupiedRaiserNote}</span>`
+    ? `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} <span data-new-guest-claim-note>A new guest pays the full bid. Same site raises. You pay only the difference.</span><span data-raiser-claim-note hidden>${occupiedRaiserNote}</span>${occupiedRaiserGuest}`
     : "";
   const note = !episode
     ? "Rank is the bid. No episode is open. Polar cannot charge yet."
@@ -377,7 +381,7 @@ function renderClaim(input: {
       ? `${label} is a new empty board. First paid bid of at least $${MIN_BID_USD} takes #1. Prior bids do not carry. Unpaid checkout does not rank.`
       : openEmpty
         ? `First paid bid of at least $${MIN_BID_USD} takes #1. Unpaid checkout does not rank.`
-        : `<span data-new-guest-form-hint>A new guest pays the full bid. Already on this episode? Enter the same site and raise. You pay only the difference.</span><span data-raiser-form-hint hidden>${occupiedRaiserHint}</span>`;
+        : `<span data-new-guest-form-hint>A new guest pays the full bid. Already on this episode? Enter the same site and raise. You pay only the difference.</span><span data-raiser-form-hint hidden>${occupiedRaiserHint}</span>${occupiedRaiserGuest}`;
   const disabled = input.canCharge ? "" : " disabled";
   const live = input.canCharge ? " data-claim-live" : "";
   const openSeat = openEmpty ? " data-open-seat" : "";
@@ -438,7 +442,7 @@ function renderClaim(input: {
       ? `<label class="bid-field" data-later-claim-raise-amount${liveListingsAttr}>
         <span class="sr-only">New total in dollars. Polar charges the full new bid. Same site: Polar charges only the difference.</span>
         <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}"${disabled}/></span>
-        <span class="raise-amount" data-raise-amount data-polar-lead="new"><span data-new-guest-polar-charge>Polar charges $<span data-new-bid-usd>${input.defaultBid}</span> new. Raise $<span data-raise-amount-usd>${raiseChargeUsd}</span></span><span data-raiser-polar-charge hidden>Polar charges $<span data-raise-lead-usd>${raiseChargeUsd}</span>. Same site: only the difference</span></span>
+        <span class="raise-amount" data-raise-amount data-polar-lead="new"><span data-new-guest-polar-charge>Polar charges $<span data-new-bid-usd>${input.defaultBid}</span> new. Raise $<span data-raise-amount-usd>${raiseChargeUsd}</span></span><span data-raiser-polar-charge hidden>Polar charges $<span data-raise-lead-usd>${raiseChargeUsd}</span>. Same site: only the difference</span><span data-raiser-guest hidden>. Raising <span data-raiser-guest-name></span>.</span></span>
       </label>`
       : `<label class="bid-field">
         <span class="sr-only">Amount in dollars</span>
@@ -668,6 +672,8 @@ ${studio}
     var raiserHintUsd = document.querySelector("[data-raiser-form-hint-usd]");
     var formHintLead = document.querySelector("[data-form-hint-lead]");
     var bidField = document.querySelector("[data-later-claim-raise-amount]");
+    var raiserGuests = document.querySelectorAll("[data-raiser-guest]");
+    var raiserGuestNames = document.querySelectorAll("[data-raiser-guest-name]");
     var siteInput = document.querySelector('input[name="siteUrl"]');
     var listings = [];
     try {
@@ -688,13 +694,13 @@ ${studio}
       }
       return "";
     }
-    function existingBid() {
+    function matchedListing() {
       var id = identityFrom(siteInput && siteInput.value);
-      if (!id) return NaN;
+      if (!id) return null;
       for (var i = 0; i < listings.length; i++) {
-        if (listings[i].identity === id) return listings[i].bidUsd;
+        if (listings[i].identity === id) return listings[i];
       }
-      return NaN;
+      return null;
     }
     function syncCharge() {
       var next = parseBid(input.value);
@@ -702,8 +708,9 @@ ${studio}
       if (chargeUsd && Number.isFinite(current)) {
         chargeUsd.textContent = String(next > current ? next - current : 0);
       }
-      var existing = existingBid();
-      var raising = Number.isFinite(existing);
+      var match = matchedListing();
+      var raising = Boolean(match);
+      var existing = match ? match.bidUsd : NaN;
       var difference = raising
         ? Math.max(0, next - existing)
         : Number.isFinite(current) && next > current
@@ -712,6 +719,14 @@ ${studio}
       if (raiseLeadUsd) raiseLeadUsd.textContent = String(difference);
       if (raiserClaimUsd) raiserClaimUsd.textContent = String(difference);
       if (raiserHintUsd) raiserHintUsd.textContent = String(difference);
+      var guestName = match && match.name ? String(match.name) : "";
+      raiserGuestNames.forEach(function (el) {
+        el.textContent = guestName;
+      });
+      raiserGuests.forEach(function (el) {
+        if (raising) el.removeAttribute("hidden");
+        else el.setAttribute("hidden", "");
+      });
       if (newGuestCharge) {
         if (raising) newGuestCharge.setAttribute("hidden", "");
         else newGuestCharge.removeAttribute("hidden");
