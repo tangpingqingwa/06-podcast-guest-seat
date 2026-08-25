@@ -222,6 +222,11 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-raiser-claim-note],
 .studio.studio-open-empty[data-empty-honest] [data-raiser-claim-usd],
 .studio.studio-open-empty[data-empty-honest] [data-claim-note-lead],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim-form-hint],
+.studio.studio-open-empty[data-empty-honest] [data-new-guest-form-hint],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-form-hint],
+.studio.studio-open-empty[data-empty-honest] [data-raiser-form-hint-usd],
+.studio.studio-open-empty[data-empty-honest] [data-form-hint-lead],
 .studio.studio-open-empty[data-empty-honest] [data-live-listings],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
@@ -255,6 +260,11 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-raiser-claim-note],
 .studio.studio-open-empty [data-raiser-claim-usd],
 .studio.studio-open-empty [data-claim-note-lead],
+.studio.studio-open-empty [data-later-claim-form-hint],
+.studio.studio-open-empty [data-new-guest-form-hint],
+.studio.studio-open-empty [data-raiser-form-hint],
+.studio.studio-open-empty [data-raiser-form-hint-usd],
+.studio.studio-open-empty [data-form-hint-lead],
 .studio.studio-open-empty [data-live-listings],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
@@ -741,6 +751,17 @@ export const OCCUPIED_CSS = /* css */ `
   color: var(--muted);
 }
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-usd] {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* Occupied live: later-claim form-hint names the raise difference after the same site is entered. New guest still reads the full bid. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-new-guest-form-hint] {
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-raiser-form-hint] {
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-raiser-form-hint-usd] {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }

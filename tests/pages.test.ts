@@ -8150,6 +8150,475 @@ test("GET / on occupied live later-claim note names the raise difference after t
   assert.match(lockedCheckout.body, /episode_locked/);
 });
 
+test("GET / on occupied live later-claim form-hint names the raise difference after the same site is entered — new guest still reads the full bid", async () => {
+  const monday = new Date("2026-08-17T00:00:00.000Z");
+  const episode = {
+    id: "ep_occupied_claim_form_hint_raise",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat" as const,
+    vetoEnabled: true,
+    opensAt: "2026-08-16T00:00:00.000Z",
+    locksAt: null,
+    lockedAt: null,
+  };
+  const listings: Listing[] = [
+    {
+      id: "lst_ada",
+      episodeId: episode.id,
+      name: "Ada Lovelace",
+      siteUrl: "https://example.com/ada",
+      oneLiner: "Notes on the analytical engine.",
+      bidUsd: 12,
+      firstBidAt: "2026-08-16T12:00:00.000Z",
+      paidAt: "2026-08-16T12:00:00.000Z",
+      clicks: 3,
+      vetoedAt: null,
+      vetoReason: null,
+    },
+    {
+      id: "lst_hold",
+      episodeId: episode.id,
+      name: "Hold Co",
+      siteUrl: "https://hold.example/",
+      oneLiner: "Still listed below #1.",
+      bidUsd: 8,
+      firstBidAt: "2026-08-16T18:00:00.000Z",
+      paidAt: "2026-08-16T18:00:00.000Z",
+      clicks: 2,
+      vetoedAt: null,
+      vetoReason: null,
+    },
+  ];
+  const liveRefs = [
+    { identity: "example.com/ada", bidUsd: 12 },
+    { identity: "hold.example/", bidUsd: 8 },
+  ];
+  assert.deepEqual(matchLiveListing("https://example.com/ada", liveRefs), {
+    identity: "example.com/ada",
+    bidUsd: 12,
+  });
+  assert.equal(matchLiveListing("https://raise.example/", liveRefs), undefined);
+  const adaRaise = matchLiveListing("https://example.com/ada", liveRefs);
+  assert.equal(13 - (adaRaise?.bidUsd ?? 0), 1);
+
+  const occupiedHtml = renderBoardHtml(episode, listings, monday);
+  const occupied = studioMarkup(occupiedHtml);
+  const ticketAt = occupied.indexOf("data-show-ticket");
+  const rundownAt = occupied.indexOf("data-rundown");
+  const guestClickAt = occupied.indexOf('data-first-click="guest"');
+  const laterClaimClassAt = occupied.indexOf('class="claim later-claim"');
+  const laterClaimAt = occupied.indexOf("data-later-claim");
+  const claimAt = occupied.indexOf('id="claim"');
+  const claimTitleAt = occupied.indexOf("Claim the guest seat for");
+  const bidFieldAt = occupied.indexOf('class="bid-field"');
+  const raiseAmountAt = occupied.indexOf("data-later-claim-raise-amount");
+  const newGuestChargeAt = occupied.indexOf("data-new-guest-polar-charge");
+  const raiserChargeAt = occupied.indexOf("data-raiser-polar-charge");
+  const laterClaimWindowAt = occupied.indexOf("data-later-claim-window");
+  const claimNoteLeadAt = occupied.indexOf('data-claim-note-lead="new"');
+  const laterClaimRaiseAt = occupied.indexOf("data-later-claim-raise>");
+  const newGuestNoteAt = occupied.indexOf("data-new-guest-claim-note");
+  const raiserNoteAt = occupied.indexOf("data-raiser-claim-note");
+  const outbidAt = occupied.indexOf(">Outbid</button>");
+  const identityAt = occupied.indexOf("data-later-claim-identity");
+  const siteAt = occupied.indexOf('name="siteUrl"');
+  const formHintAt = occupied.indexOf('class="form-hint"');
+  const formHintMarkAt = occupied.indexOf("data-later-claim-form-hint");
+  const formHintLeadAt = occupied.indexOf('data-form-hint-lead="new"');
+  const newGuestHintAt = occupied.indexOf("data-new-guest-form-hint");
+  const newGuestHintCopyAt = occupied.indexOf("Already on this episode?");
+  const raiserHintAt = occupied.indexOf("data-raiser-form-hint hidden");
+  const raiserHintUsdAt = occupied.indexOf("data-raiser-form-hint-usd");
+  const raiserHintCopyAt = occupied.indexOf("Already on this episode: you pay");
+  const deskAt = occupied.indexOf("data-host-lock");
+  assert.notEqual(ticketAt, -1);
+  assert.notEqual(rundownAt, -1);
+  assert.notEqual(guestClickAt, -1);
+  assert.notEqual(laterClaimClassAt, -1);
+  assert.notEqual(laterClaimAt, -1);
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(claimTitleAt, -1);
+  assert.notEqual(bidFieldAt, -1);
+  assert.notEqual(raiseAmountAt, -1);
+  assert.notEqual(newGuestChargeAt, -1);
+  assert.notEqual(raiserChargeAt, -1);
+  assert.notEqual(laterClaimWindowAt, -1);
+  assert.notEqual(claimNoteLeadAt, -1);
+  assert.notEqual(laterClaimRaiseAt, -1);
+  assert.notEqual(newGuestNoteAt, -1);
+  assert.notEqual(raiserNoteAt, -1);
+  assert.notEqual(outbidAt, -1);
+  assert.notEqual(identityAt, -1);
+  assert.notEqual(siteAt, -1);
+  assert.notEqual(formHintAt, -1);
+  assert.notEqual(formHintMarkAt, -1);
+  assert.notEqual(formHintLeadAt, -1);
+  assert.notEqual(newGuestHintAt, -1);
+  assert.notEqual(newGuestHintCopyAt, -1);
+  assert.notEqual(raiserHintAt, -1);
+  assert.notEqual(raiserHintUsdAt, -1);
+  assert.notEqual(raiserHintCopyAt, -1);
+  assert.notEqual(deskAt, -1);
+  assert.ok(ticketAt < rundownAt);
+  assert.ok(rundownAt < guestClickAt);
+  assert.ok(guestClickAt < laterClaimClassAt);
+  assert.ok(laterClaimClassAt < claimAt);
+  assert.ok(claimAt < laterClaimAt);
+  assert.ok(laterClaimAt < claimTitleAt);
+  assert.ok(claimTitleAt < bidFieldAt);
+  assert.ok(bidFieldAt < raiseAmountAt);
+  assert.ok(raiseAmountAt < newGuestChargeAt);
+  assert.ok(newGuestChargeAt < raiserChargeAt);
+  assert.ok(raiserChargeAt < laterClaimWindowAt);
+  assert.ok(laterClaimWindowAt < claimNoteLeadAt);
+  assert.ok(claimNoteLeadAt < laterClaimRaiseAt);
+  assert.ok(laterClaimRaiseAt < newGuestNoteAt);
+  assert.ok(newGuestNoteAt < raiserNoteAt);
+  assert.ok(raiserNoteAt < outbidAt);
+  assert.ok(outbidAt < identityAt);
+  assert.ok(identityAt < siteAt);
+  assert.ok(siteAt < formHintAt);
+  assert.ok(formHintAt < formHintMarkAt);
+  assert.ok(formHintMarkAt < formHintLeadAt);
+  assert.ok(formHintLeadAt < newGuestHintAt);
+  assert.ok(newGuestHintAt < newGuestHintCopyAt);
+  assert.ok(newGuestHintCopyAt < raiserHintAt);
+  assert.ok(raiserHintAt < raiserHintCopyAt);
+  assert.ok(raiserHintCopyAt < raiserHintUsdAt);
+  assert.ok(raiserHintUsdAt < deskAt);
+  const claimBlock = occupied.slice(laterClaimClassAt, deskAt);
+  const bidField = occupied.slice(bidFieldAt, laterClaimWindowAt);
+  const claimNote = occupied.slice(
+    occupied.indexOf('class="claim-note"'),
+    occupied.indexOf("<form"),
+  );
+  const formHint = occupied.slice(formHintAt, occupied.indexOf("</section>", formHintAt));
+  const newGuestHint = occupied.slice(newGuestHintAt, raiserHintAt);
+  const raiserHint = occupied.slice(raiserHintAt, occupied.indexOf("</p>", raiserHintAt));
+  assert.match(occupied, /class="studio studio-open-occupied"/);
+  assert.match(occupied, /class="claim later-claim"[^>]*id="claim"[^>]*data-later-claim/);
+  assert.match(bidField, /data-polar-lead="new"/);
+  assert.match(
+    bidField,
+    /Polar charges \$<span data-new-bid-usd>13<\/span> new\. Raise \$<span data-raise-amount-usd>1<\/span>/,
+  );
+  assert.match(
+    bidField,
+    /data-raiser-polar-charge hidden>Polar charges \$<span data-raise-lead-usd>1<\/span>\. Same site: only the difference/,
+  );
+  assert.match(claimNote, /data-claim-note-lead="new"/);
+  assert.match(
+    claimNote,
+    /data-new-guest-claim-note>A new guest pays the full bid\. Same site raises\. You pay only the difference/,
+  );
+  assert.match(
+    claimNote,
+    /data-raiser-claim-note hidden>You pay \$<span data-raiser-claim-usd>1<\/span>\. Same site: the raise difference, not a full bid/,
+  );
+  assert.match(formHint, /data-later-claim-form-hint/);
+  assert.match(formHint, /data-form-hint-lead="new"/);
+  assert.match(
+    newGuestHint,
+    /data-new-guest-form-hint>A new guest pays the full bid\. Already on this episode\? Enter the same site and raise\. You pay only the difference/,
+  );
+  assert.doesNotMatch(newGuestHint, /\bhidden\b/);
+  assert.match(
+    raiserHint,
+    /data-raiser-form-hint hidden>Already on this episode: you pay \$<span data-raiser-form-hint-usd>1<\/span>, the raise difference/,
+  );
+  assert.doesNotMatch(raiserHint, /A new guest pays the full bid/);
+  assert.doesNotMatch(raiserHint, /pays the full bid/);
+  assert.doesNotMatch(raiserHint, /you pay a new bid/i);
+  assert.doesNotMatch(raiserHint, /a new guest/i);
+  assert.match(claimBlock, />Outbid<\/button>/);
+  assert.match(claimBlock, /data-later-claim-identity/);
+  assert.match(claimBlock, /Then name, site, one-liner/);
+  assert.match(occupied, /data-first-click="guest"/);
+  assert.match(occupied, /Ada Lovelace/);
+  assert.match(occupied, /data-host-lock/);
+  assert.equal(countExact(occupied, "data-new-guest-form-hint"), 1);
+  assert.equal(countExact(occupied, "data-raiser-form-hint hidden"), 1);
+  assert.equal(countExact(occupied, "data-raiser-form-hint-usd"), 1);
+  assert.equal(countExact(occupied, 'data-form-hint-lead="new"'), 1);
+  assert.equal(countExact(occupied, "data-later-claim-form-hint"), 1);
+  assert.equal(countExact(formHint, "A new guest pays the full bid"), 1);
+  assert.equal(countExact(formHint, "Already on this episode?"), 1);
+  assert.equal(countExact(formHint, "Already on this episode: you pay"), 1);
+  assert.equal(countExact(claimNote, "A new guest pays the full bid"), 1);
+  assert.equal(countExact(occupied, 'data-first-click="guest"'), 1);
+  assert.doesNotMatch(occupied, /data-later-write/);
+  assert.doesNotMatch(occupied, /Claim #1 for/);
+  assert.doesNotMatch(occupied, /data-first-click="claim"/);
+  assert.doesNotMatch(occupied, /later-claim-form-hint-after/);
+  assert.doesNotMatch(occupied, /occupied-form-hint-after/);
+  assert.doesNotMatch(occupied, /form-hint-raise-after/);
+  assert.doesNotMatch(occupied, /later-claim-hint-after/);
+  assert.doesNotMatch(occupied, /form-hint-lead-after/);
+  assert.doesNotMatch(occupied, /claim-after-guest/);
+  assert.doesNotMatch(occupied, /lock-after-open-six/);
+  const occupiedCss = occupiedHtml.slice(
+    occupiedHtml.indexOf("<style>"),
+    occupiedHtml.indexOf("</style>"),
+  );
+  assert.match(
+    occupiedCss,
+    /Occupied live: later-claim form-hint names the raise difference after the same site is entered\. New guest still reads the full bid/,
+  );
+  assert.match(
+    occupiedCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.form-hint\[data-later-claim-form-hint\] \[data-new-guest-form-hint\]/,
+  );
+  assert.match(
+    occupiedCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.form-hint\[data-later-claim-form-hint\] \[data-raiser-form-hint\]/,
+  );
+  assert.match(
+    occupiedCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.form-hint\[data-later-claim-form-hint\] \[data-raiser-form-hint-usd\]/,
+  );
+  assert.match(
+    occupiedCss,
+    /Occupied live: later-claim note names the raise difference after the same site is entered\. New guest still reads the full bid/,
+  );
+  assert.match(
+    occupiedCss,
+    /Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising\. New guest still reads the full new bid/,
+  );
+  assert.match(occupiedCss, /Occupied live: later-claim names the raise difference beside Outbid/);
+  assert.match(occupiedCss, /Occupied live: later-claim identity is a later write after Outbid/);
+  assert.match(occupiedCss, /Occupied live: Claim is a later write after the #1 guest \/ rundown/);
+  const formHintCss = (
+    occupiedCss.split(
+      "Occupied live: later-claim form-hint names the raise difference after the same site is entered. New guest still reads the full bid.",
+      2,
+    )[1] ?? ""
+  ).split("Occupied live: later-claim identity is a later write after Outbid")[0] ?? "";
+  assert.match(formHintCss, /color:\s*var\(--muted\)/);
+  assert.doesNotMatch(formHintCss, /background:/);
+  assert.doesNotMatch(formHintCss, /var\(--on-air\)/);
+  assert.doesNotMatch(formHintCss, /data-empty-claim-window/);
+  assert.doesNotMatch(formHintCss, /listing-identity/);
+
+  const script = occupiedHtml.slice(
+    occupiedHtml.indexOf("<script>"),
+    occupiedHtml.indexOf("</script>"),
+  );
+  assert.match(script, /data-live-listings/);
+  assert.match(script, /input\[name="siteUrl"\]/);
+  assert.match(script, /data-new-guest-form-hint/);
+  assert.match(script, /data-raiser-form-hint/);
+  assert.match(script, /data-raiser-form-hint-usd/);
+  assert.match(script, /data-form-hint-lead/);
+  assert.match(script, /data-new-guest-claim-note/);
+  assert.match(script, /data-raiser-claim-note/);
+  assert.match(script, /data-new-guest-polar-charge/);
+  assert.match(script, /data-raiser-polar-charge/);
+  assert.match(script, /setAttribute\("hidden"/);
+  assert.match(script, /removeAttribute\("hidden"/);
+  assert.match(script, /raising \? "raise" : "new"/);
+
+  const emptyDb = memoryDb();
+  createEpisode(emptyDb, {
+    id: "ep_empty_claim_form_hint_raise_stays_shipped",
+    showId: "show_english",
+    label: "Episode 1",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+  const emptyApp = await buildApp({ db: emptyDb });
+  after(() => emptyApp.close());
+  const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
+  const emptyStudio = studioMarkup(emptyBoard.body);
+  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyLaterWriteAt = emptyStudio.indexOf("data-later-write");
+  const emptyFormHint = emptyStudio.slice(
+    emptyStudio.indexOf('class="form-hint"'),
+    emptyStudio.indexOf("</section>", emptyStudio.indexOf('class="form-hint"')),
+  );
+  assert.match(emptyStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
+  assert.match(emptyStudio, /Claim #1 for/);
+  assert.match(emptyStudio, /Then the guest site/);
+  assert.ok(emptyOutbidAt !== -1 && emptyLaterWriteAt > emptyOutbidAt);
+  assert.doesNotMatch(emptyFormHint, /A new guest pays the full bid/);
+  assert.doesNotMatch(emptyFormHint, /Already on this episode\?/);
+  assert.doesNotMatch(emptyFormHint, /Already on this episode: you pay/);
+  assert.doesNotMatch(emptyStudio, /data-new-guest-form-hint/);
+  assert.doesNotMatch(emptyStudio, /data-raiser-form-hint/);
+  assert.doesNotMatch(emptyStudio, /data-raiser-form-hint-usd/);
+  assert.doesNotMatch(emptyStudio, /data-form-hint-lead/);
+  assert.doesNotMatch(emptyStudio, /data-later-claim-form-hint/);
+  assert.doesNotMatch(emptyStudio, /data-later-claim/);
+  assert.doesNotMatch(emptyStudio, /class="claim later-claim"/);
+  assert.doesNotMatch(emptyStudio, /studio-open-occupied/);
+  const emptyCss = emptyBoard.body.slice(
+    emptyBoard.body.indexOf("<style>"),
+    emptyBoard.body.indexOf("</style>"),
+  );
+  assert.match(emptyCss, /Empty open: guest site is a later write after Claim #1 \/ Outbid/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-later-claim-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-later-claim-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-new-guest-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-new-guest-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-raiser-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-raiser-form-hint\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty\[data-empty-honest\] \[data-form-hint-lead\]/);
+  assert.match(emptyCss, /\.studio\.studio-open-empty \[data-form-hint-lead\]/);
+  assert.doesNotMatch(
+    emptyCss,
+    /\.studio\.studio-open-occupied \.claim\.later-claim\[data-later-claim\] \.form-hint\[data-later-claim-form-hint\] \[data-raiser-form-hint\]/,
+  );
+
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_live_claim_form_hint_raise",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-16T00:00:00.000Z",
+  });
+  insertListing(db, {
+    id: "lst_ada",
+    episodeId: "ep_live_claim_form_hint_raise",
+    name: "Ada Lovelace",
+    siteUrl: "https://example.com/ada",
+    oneLiner: "Notes on the analytical engine.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+    clicks: 3,
+  });
+  const app = await buildApp({ db, hostSessionSecret: DEV_HOST_SESSION_SECRET });
+  after(() => app.close());
+  const live = await app.inject({ method: "GET", url: "/" });
+  assert.equal(live.statusCode, 200);
+  const liveStudio = studioMarkup(live.body);
+  const liveGuestAt = liveStudio.indexOf('data-first-click="guest"');
+  const liveLaterClaimAt = liveStudio.indexOf("data-later-claim");
+  const liveNewGuestChargeAt = liveStudio.indexOf("data-new-guest-polar-charge");
+  const liveRaiserChargeAt = liveStudio.indexOf("data-raiser-polar-charge");
+  const liveNewGuestNoteAt = liveStudio.indexOf("data-new-guest-claim-note");
+  const liveRaiserNoteAt = liveStudio.indexOf("data-raiser-claim-note");
+  const liveOutbidAt = liveStudio.indexOf(">Outbid</button>");
+  const liveIdentityAt = liveStudio.indexOf("data-later-claim-identity");
+  const liveSiteAt = liveStudio.indexOf('name="siteUrl"');
+  const liveFormHintAt = liveStudio.indexOf("data-later-claim-form-hint");
+  const liveNewGuestHintAt = liveStudio.indexOf("data-new-guest-form-hint");
+  const liveRaiserHintAt = liveStudio.indexOf("data-raiser-form-hint hidden");
+  assert.ok(liveGuestAt > -1 && liveGuestAt < liveLaterClaimAt);
+  assert.ok(liveLaterClaimAt < liveNewGuestChargeAt);
+  assert.ok(liveNewGuestChargeAt < liveRaiserChargeAt);
+  assert.ok(liveRaiserChargeAt < liveNewGuestNoteAt);
+  assert.ok(liveNewGuestNoteAt < liveRaiserNoteAt);
+  assert.ok(liveRaiserNoteAt < liveOutbidAt);
+  assert.ok(liveOutbidAt < liveIdentityAt);
+  assert.ok(liveIdentityAt < liveSiteAt);
+  assert.ok(liveSiteAt < liveFormHintAt);
+  assert.ok(liveFormHintAt < liveNewGuestHintAt);
+  assert.ok(liveNewGuestHintAt < liveRaiserHintAt);
+  assert.match(liveStudio, /class="studio studio-open-occupied"/);
+  assert.match(liveStudio, /class="claim later-claim"/);
+  assert.match(
+    liveStudio,
+    /data-new-guest-form-hint>A new guest pays the full bid\. Already on this episode\? Enter the same site and raise\. You pay only the difference/,
+  );
+  assert.match(
+    liveStudio,
+    /data-raiser-form-hint hidden>Already on this episode: you pay \$<span data-raiser-form-hint-usd>1<\/span>, the raise difference/,
+  );
+  assert.match(
+    liveStudio,
+    /data-raiser-claim-note hidden>You pay \$<span data-raiser-claim-usd>1<\/span>\. Same site: the raise difference, not a full bid/,
+  );
+  assert.match(
+    liveStudio,
+    /data-raiser-polar-charge hidden>Polar charges \$<span data-raise-lead-usd>1<\/span>\. Same site: only the difference/,
+  );
+  assert.match(liveStudio, /data-later-claim-identity/);
+  assert.match(liveStudio, /data-first-click="guest"/);
+  assert.match(liveStudio, /data-host-lock/);
+  assert.doesNotMatch(liveStudio, /Claim #1 for/);
+  assert.doesNotMatch(liveStudio, /claim-after-guest/);
+  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  assert.match(liveScript, /input\[name="siteUrl"\]/);
+  assert.match(liveScript, /data-raiser-form-hint/);
+  assert.match(liveScript, /data-form-hint-lead/);
+  assert.match(liveScript, /data-raiser-claim-note/);
+  assert.match(liveScript, /data-claim-note-lead/);
+
+  const newGuestCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    payload: {
+      episodeId: "ep_live_claim_form_hint_raise",
+      name: "Raise Co",
+      siteUrl: "https://raise.example/",
+      oneLiner: "Still live.",
+      bidUsd: 13,
+    },
+  });
+  assert.equal(newGuestCheckout.statusCode, 200);
+  const newGuestBody = newGuestCheckout.json() as {
+    kind: string;
+    chargeUsd: number;
+  };
+  assert.equal(newGuestBody.kind, "open");
+  assert.equal(newGuestBody.chargeUsd, 13);
+
+  const raiseCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    payload: {
+      episodeId: "ep_live_claim_form_hint_raise",
+      name: "Ada Lovelace",
+      siteUrl: "https://example.com/ada",
+      oneLiner: "Notes on the analytical engine.",
+      bidUsd: 13,
+    },
+  });
+  assert.equal(raiseCheckout.statusCode, 200);
+  const raiseBody = raiseCheckout.json() as { kind: string; chargeUsd: number };
+  assert.equal(raiseBody.kind, "raise");
+  assert.equal(raiseBody.chargeUsd, 1);
+
+  const locked = await app.inject({
+    method: "POST",
+    url: "/host/lock",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload: `episodeId=ep_live_claim_form_hint_raise&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
+  });
+  assert.equal(locked.statusCode, 303);
+  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const lockedStudio = studioMarkup(afterLock.body);
+  assert.match(lockedStudio, /Episode 12 is locked/);
+  assert.match(lockedStudio, /data-lock-409/);
+  assert.match(lockedStudio, /Ada Lovelace/);
+  assert.doesNotMatch(lockedStudio, /A new guest pays the full bid/);
+  assert.doesNotMatch(lockedStudio, /Already on this episode\?/);
+  assert.doesNotMatch(lockedStudio, /Already on this episode: you pay/);
+  assert.doesNotMatch(lockedStudio, /data-new-guest-form-hint/);
+  assert.doesNotMatch(lockedStudio, /data-raiser-form-hint/);
+  assert.doesNotMatch(lockedStudio, /data-form-hint-lead/);
+  assert.doesNotMatch(lockedStudio, /data-later-claim-form-hint/);
+  assert.doesNotMatch(lockedStudio, /class="claim later-claim"/);
+  const lockedCheckout = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      "episodeId=ep_live_claim_form_hint_raise&name=Too%20Late&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Locked.&bidUsd=13",
+  });
+  assert.equal(lockedCheckout.statusCode, 409);
+  assert.match(lockedCheckout.body, /data-lock-409/);
+  assert.match(lockedCheckout.body, /episode_locked/);
+});
+
 test("unpaid stays off the rundown — No #1 guest until Polar reports paid", async () => {
   const db = memoryDb();
   const episode = createEpisode(db, {
