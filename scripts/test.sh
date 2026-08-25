@@ -267,11 +267,28 @@ if [[ -f package.json ]]; then
     || fail "occupied CSS must document later-claim rolling last-7-days beside Outbid"
   grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window]' src/views/skin.ts \
     || fail "occupied later-claim rolling-window CSS must be scoped to occupied later-claim"
+  grep -q 'data-later-claim-identity' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing later-claim-identity later write"
+  grep -q 'Then name, site, one-liner' src/http/routes/pages.ts \
+    || fail "occupied later-claim must name identity as a later write after Outbid"
+  grep -q 'Occupied live: later-claim identity is a later write after Outbid' src/views/skin.ts \
+    || fail "occupied CSS must document later-claim identity as a later write after Outbid"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .later-claim-identity[data-later-claim-identity]' src/views/skin.ts \
+    || fail "occupied later-claim identity CSS must be scoped to occupied later-claim"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim-identity"
+  grep -F -q '.studio.studio-open-empty [data-later-claim-identity]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied later-claim-identity without stamp-only"
+  grep -F -q '.studio.studio-open-empty .later-claim-identity' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked later-claim-identity class"
+  if grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .listing-identity[data-later-write]' src/views/skin.ts; then
+    fail "do not stamp empty later-write onto occupied later-claim"
+  fi
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-window]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-window"
   grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after' \
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; name rolling last-7-days on empty copy"
   fi
@@ -664,6 +681,8 @@ if [[ -f package.json ]]; then
     || fail "empty-open claim-note rolling last-7-days test did not run"
   grep -q 'GET / on occupied live names rolling last-7-days on later-claim' "$test_log" \
     || fail "occupied later-claim rolling last-7-days test did not run"
+  grep -q 'GET / on occupied live keeps later-claim identity a later write after Outbid' "$test_log" \
+    || fail "occupied later-claim identity later-write test did not run"
   grep -q 'rolling last-7-days window is 7' "$test_log" \
     || fail "rolling last-7-days window math test did not run"
   grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \

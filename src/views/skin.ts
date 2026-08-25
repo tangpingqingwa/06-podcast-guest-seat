@@ -210,6 +210,7 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty[data-empty-honest] [data-later-fact],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim],
 .studio.studio-open-empty[data-empty-honest] [data-later-claim-window],
+.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity],
 .studio.studio-open-empty[data-empty-honest] [data-rolling-week],
 .studio.studio-open-empty[data-empty-honest] .week-window,
 .studio.studio-open-empty[data-empty-honest] [data-paid-at],
@@ -230,12 +231,14 @@ nav[aria-label="Main"] a:hover { color: #f3ead8; }
 .studio.studio-open-empty [data-later-fact],
 .studio.studio-open-empty [data-later-claim],
 .studio.studio-open-empty [data-later-claim-window],
+.studio.studio-open-empty [data-later-claim-identity],
 .studio.studio-open-empty [data-rolling-week],
 .studio.studio-open-empty .week-window,
 .studio.studio-open-empty [data-paid-at],
 .studio.studio-open-empty .later-fact,
 .studio.studio-open-empty .later-facts,
 .studio.studio-open-empty .later-claim,
+.studio.studio-open-empty .later-claim-identity,
 .studio.studio-open-empty .guest.later-seat,
 .studio.studio-open-empty .later-name,
 .studio.studio-open-empty .later-go,
@@ -663,6 +666,29 @@ export const OCCUPIED_CSS = /* css */ `
 }
 /* Occupied live: later-claim names rolling last-7-days beside Outbid. Not Monday 00:00 UTC. Empty claim-window stays off. */
 .studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window] {
+  color: var(--muted);
+}
+/* Occupied live: later-claim identity is a later write after Outbid. Empty later-write stays off. */
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .later-claim-identity[data-later-claim-identity] {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .later-claim-identity-label {
+  margin: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.studio.studio-open-occupied .claim.later-claim[data-later-claim] .later-claim-identity[data-later-claim-identity] .fields input {
+  height: 2.2rem;
+  font-size: 0.88rem;
   color: var(--muted);
 }
 /* Occupied live: rolling last-7-days window. Not a civil-midnight lock. */
