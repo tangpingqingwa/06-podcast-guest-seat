@@ -301,6 +301,20 @@ if [[ -f package.json ]]; then
     || fail "occupied CSS must document Polar full new bid for a new guest"
   grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-new-bid-usd]' src/views/skin.ts \
     || fail "occupied later-claim full-bid CSS must be scoped to occupied dashed \$amount"
+  grep -q 'data-raiser-polar-charge' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing raiser Polar charge on dashed \$amount"
+  grep -q 'data-raise-lead-usd' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing Polar raise-lead amount when the guest is raising"
+  grep -q 'Same site: only the difference' src/http/routes/pages.ts \
+    || fail "occupied later-claim must name Polar charges the raise difference for a same-site raiser"
+  grep -q 'data-live-listings' src/http/routes/pages.ts \
+    || fail "occupied later-claim missing live listings so a raiser can match the same site"
+  grep -q 'Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising' src/views/skin.ts \
+    || fail "occupied CSS must document Polar charge leading with the raise difference when raising"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raiser-polar-charge]' src/views/skin.ts \
+    || fail "occupied later-claim raiser Polar-charge CSS must be scoped to occupied dashed \$amount"
+  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raise-lead-usd]' src/views/skin.ts \
+    || fail "occupied later-claim raise-lead CSS must be scoped to occupied dashed \$amount"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-identity"
   grep -F -q '.studio.studio-open-empty [data-later-claim-identity]' src/views/skin.ts \
@@ -323,6 +337,22 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied new-bid-usd"
   grep -F -q '.studio.studio-open-empty [data-new-bid-usd]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied new-bid-usd without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-guest-polar-charge]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-guest Polar charge"
+  grep -F -q '.studio.studio-open-empty [data-new-guest-polar-charge]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied new-guest Polar charge without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-polar-charge]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser Polar charge"
+  grep -F -q '.studio.studio-open-empty [data-raiser-polar-charge]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raiser Polar charge without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raise-lead-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raise-lead-usd"
+  grep -F -q '.studio.studio-open-empty [data-raise-lead-usd]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied raise-lead-usd without stamp-only"
+  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-live-listings]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied live-listings"
+  grep -F -q '.studio.studio-open-empty [data-live-listings]' src/views/skin.ts \
+    || fail "empty-open shell must hide leaked occupied live-listings without stamp-only"
   grep -F -q '.studio.studio-open-empty .raise-amount' src/views/skin.ts \
     || fail "empty-open shell must hide leaked raise-amount class"
   if grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .listing-identity[data-later-write]' src/views/skin.ts; then
@@ -332,7 +362,7 @@ if [[ -f package.json ]]; then
     || fail "empty-open shell must hide leaked occupied later-claim-window"
   grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
     || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after' \
+  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after|later-claim-raise-lead-after|occupied-raise-lead-after|raise-lead-after-outbid|later-claim-raise-lead-N|occupied-raise-lead-N' \
     src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
     fail "do not stamp another named hop; name rolling last-7-days on empty copy"
   fi
