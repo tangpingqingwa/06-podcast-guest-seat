@@ -107,61 +107,83 @@ export function setVetoEnabled(
   episodeId: string,
   vetoEnabled: boolean,
 ): Episode {
-  const episode = requireEpisode(db, episodeId);
-  if (episode.vetoEnabled === vetoEnabled) {
-    return episode;
-  }
-  if (isVetoFlagFrozen(db, episodeId)) {
-    throw new VetoError(
-      "veto_flag_frozen",
-      "veto flag is frozen after the first paid bid",
-    );
-  }
-  db.prepare("UPDATE episodes SET veto_enabled = ? WHERE id = ?").run(
-    vetoEnabled ? 1 : 0,
-    episodeId,
-  );
-  const updated = getEpisode(db, episodeId);
-  if (!updated) {
-    throw new Error("episode missing after veto flag update");
-  }
-  return updated;
+  return db
+    .transaction(() => {
+      const episode = requireEpisode(db, episodeId);
+      if (episode.lockedAt) {
+        throw new VetoError("episode_locked", "episode is locked");
+      }
+      if (episode.vetoEnabled === vetoEnabled) {
+        return episode;
+      }
+      if (isVetoFlagFrozen(db, episodeId)) {
+        throw new VetoError(
+          "veto_flag_frozen",
+          "veto flag is frozen after the first paid bid",
+        );
+      }
+      const updated = db
+        .prepare(
+          "UPDATE episodes SET veto_enabled = ? WHERE id = ? AND locked_at IS NULL",
+        )
+        .run(vetoEnabled ? 1 : 0, episodeId);
+      if (updated.changes !== 1) {
+        throw new VetoError("episode_locked", "episode is locked");
+      }
+      const changed = getEpisode(db, episodeId);
+      if (!changed) {
+        throw new Error("episode missing after veto flag update");
+      }
+      return changed;
+    })
+    .immediate();
 }
 
 export function vetoListing(db: AppDb, input: VetoListingInput): VetoResult {
-  const episode = requireEpisode(db, input.episodeId);
-  if (episode.lockedAt) {
-    throw new VetoError("episode_locked", "episode is locked");
-  }
-  if (!episode.vetoEnabled) {
-    throw new VetoError("veto_disabled", "host veto is off for this episode");
-  }
+  return db
+    .transaction(() => {
+      const episode = requireEpisode(db, input.episodeId);
+      if (episode.lockedAt) {
+        throw new VetoError("episode_locked", "episode is locked");
+      }
+      if (!episode.vetoEnabled) {
+        throw new VetoError("veto_disabled", "host veto is off for this episode");
+      }
 
-  const reason = normalizeVetoReason(input.reason);
-  const listing = getListing(db, input.listingId);
-  if (!listing) {
-    throw new VetoError("listing_not_found", "listing not found");
-  }
-  if (listing.episodeId !== episode.id) {
-    throw new VetoError(
-      "listing_not_on_episode",
-      "listing is not on this episode",
-    );
-  }
-  if (listing.vetoedAt !== null) {
-    throw new VetoError("already_vetoed", "listing is already vetoed");
-  }
+      const reason = normalizeVetoReason(input.reason);
+      const listing = getListing(db, input.listingId);
+      if (!listing) {
+        throw new VetoError("listing_not_found", "listing not found");
+      }
+      if (listing.episodeId !== episode.id) {
+        throw new VetoError(
+          "listing_not_on_episode",
+          "listing is not on this episode",
+        );
+      }
+      if (listing.vetoedAt !== null) {
+        throw new VetoError("already_vetoed", "listing is already vetoed");
+      }
 
-  const at = input.at ?? nowIso();
-  db.prepare(
-    "UPDATE listings SET vetoed_at = ?, veto_reason = ? WHERE id = ?",
-  ).run(at, reason, listing.id);
+      const at = input.at ?? nowIso();
+      const updated = db
+        .prepare(
+          `UPDATE listings
+           SET vetoed_at = ?, veto_reason = ?
+           WHERE id = ? AND episode_id = ? AND vetoed_at IS NULL`,
+        )
+        .run(at, reason, listing.id, episode.id);
+      if (updated.changes !== 1) {
+        throw new VetoError("already_vetoed", "listing is already vetoed");
+      }
 
-  const vetoed = getListing(db, listing.id);
-  if (!vetoed) {
-    throw new Error("listing missing after veto");
-  }
-  return { listing: vetoed, booked: bookedGuest(db, episode.id) };
+      const vetoed = getListing(db, listing.id);
+      if (!vetoed) {
+        throw new Error("listing missing after veto");
+      }
+      return { listing: vetoed, booked: bookedGuest(db, episode.id) };
+    })
+    .immediate();
 }
 
 export function lockEpisode(
@@ -169,16 +191,32 @@ export function lockEpisode(
   episodeId: string,
   at: string = nowIso(),
 ): LockResult {
-  const episode = requireEpisode(db, episodeId);
-  if (episode.lockedAt) {
-    return { episode, booked: bookedGuest(db, episode.id) };
-  }
-  db.prepare(
-    "UPDATE episodes SET locked_at = ? WHERE id = ? AND locked_at IS NULL",
-  ).run(at, episodeId);
-  const locked = getEpisode(db, episodeId);
-  if (!locked) {
-    throw new Error("episode missing after lock");
-  }
-  return { episode: locked, booked: bookedGuest(db, episodeId) };
+  return db
+    .transaction(() => {
+      const episode = requireEpisode(db, episodeId);
+      if (episode.lockedAt) {
+        return { episode, booked: bookedGuest(db, episode.id) };
+      }
+      const updated = db
+        .prepare(
+          "UPDATE episodes SET locked_at = ? WHERE id = ? AND locked_at IS NULL",
+        )
+        .run(at, episodeId);
+      if (updated.changes !== 1) {
+        const alreadyLocked = requireEpisode(db, episodeId);
+        if (alreadyLocked.lockedAt) {
+          return {
+            episode: alreadyLocked,
+            booked: bookedGuest(db, alreadyLocked.id),
+          };
+        }
+        throw new Error("episode lock did not update");
+      }
+      const locked = getEpisode(db, episodeId);
+      if (!locked) {
+        throw new Error("episode missing after lock");
+      }
+      return { episode: locked, booked: bookedGuest(db, episodeId) };
+    })
+    .immediate();
 }

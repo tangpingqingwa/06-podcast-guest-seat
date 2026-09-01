@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { after, mock, test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { createEpisode, defaultVetoEnabled, getEpisode } from "../src/episodes.js";
@@ -14,6 +17,11 @@ import {
   VetoError,
   vetoListing,
 } from "../src/veto.js";
+
+// Keep default-now veto/board paths stable as the calendar advances.
+const TEST_NOW = new Date("2026-08-27T12:00:00.000Z");
+mock.timers.enable({ apis: ["Date"], now: TEST_NOW });
+after(() => mock.timers.reset());
 
 function memoryDb() {
   const db = openDatabase(":memory:");
@@ -439,6 +447,95 @@ test("lock after veto books the next eligible listing, not the vetoed row", asyn
   assert.ok(stillThere);
   assert.equal(stillThere.vetoReason, "off brand");
   assert.equal(stillThere.vetoedAt, "2026-08-22T03:00:00.000Z");
+});
+
+test("host lock serializes veto and flag changes across durable connections", () => {
+  const directory = mkdtempSync(join(tmpdir(), "guest-seat-host-transitions-"));
+  const databasePath = join(directory, "guest-seat.sqlite");
+  const first = openDatabase(databasePath);
+  const second = openDatabase(databasePath);
+  try {
+    const vetoFirst = guestSeat(first, "ep_veto_first");
+    pay(first, {
+      id: "lst_veto_first_high",
+      episodeId: vetoFirst.id,
+      name: "Veto First High",
+      siteUrl: "https://veto-first-high.example/",
+      oneLiner: "Veto commits before the lock.",
+      bidUsd: 15,
+      firstBidAt: "2026-08-22T01:00:00.000Z",
+    });
+    pay(first, {
+      id: "lst_veto_first_low",
+      episodeId: vetoFirst.id,
+      name: "Veto First Low",
+      siteUrl: "https://veto-first-low.example/",
+      oneLiner: "The lower eligible bid books after veto.",
+      bidUsd: 8,
+      firstBidAt: "2026-08-22T02:00:00.000Z",
+    });
+    const vetoed = vetoListing(second, {
+      episodeId: vetoFirst.id,
+      listingId: "lst_veto_first_high",
+      reason: "editorial fit",
+      at: "2026-08-22T03:00:00.000Z",
+    });
+    assert.equal(vetoed.listing.vetoedAt, "2026-08-22T03:00:00.000Z");
+    const lockedAfterVeto = lockEpisode(
+      first,
+      vetoFirst.id,
+      "2026-08-22T04:00:00.000Z",
+    );
+    assert.equal(lockedAfterVeto.booked?.id, "lst_veto_first_low");
+
+    const settingFirst = guestSeat(first, "ep_setting_first");
+    const changed = setVetoEnabled(second, settingFirst.id, false);
+    assert.equal(changed.vetoEnabled, false);
+    const lockedAfterSetting = lockEpisode(
+      first,
+      settingFirst.id,
+      "2026-08-22T05:00:00.000Z",
+    );
+    assert.equal(lockedAfterSetting.episode.vetoEnabled, false);
+
+    const lockFirst = guestSeat(first, "ep_lock_first");
+    pay(first, {
+      id: "lst_lock_first",
+      episodeId: lockFirst.id,
+      name: "Lock First",
+      siteUrl: "https://lock-first.example/",
+      oneLiner: "Lock commits before either later host action.",
+      bidUsd: 11,
+      firstBidAt: "2026-08-22T06:00:00.000Z",
+    });
+    const locked = lockEpisode(
+      first,
+      lockFirst.id,
+      "2026-08-22T07:00:00.000Z",
+    );
+    assert.equal(locked.booked?.id, "lst_lock_first");
+    assert.throws(
+      () =>
+        vetoListing(second, {
+          episodeId: lockFirst.id,
+          listingId: "lst_lock_first",
+          reason: "too late",
+        }),
+      (err: unknown) => err instanceof VetoError && err.code === "episode_locked",
+    );
+    assert.throws(
+      () => setVetoEnabled(second, lockFirst.id, false),
+      (err: unknown) => err instanceof VetoError && err.code === "episode_locked",
+    );
+    assert.equal(getEpisode(first, lockFirst.id)?.vetoEnabled, true);
+    assert.equal(getEpisode(first, lockFirst.id)?.lockedAt, "2026-08-22T07:00:00.000Z");
+    assert.equal(listListingsForEpisode(first, lockFirst.id)[0]?.vetoedAt, null);
+    assert.equal(bookedGuest(first, lockFirst.id)?.id, "lst_lock_first");
+  } finally {
+    if (first.open) first.close();
+    if (second.open) second.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("guest-seat flag can be flipped off only before the first paid bid", async () => {

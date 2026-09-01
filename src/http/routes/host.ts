@@ -25,6 +25,15 @@ export function hostSessionSecret(env: NodeJS.ProcessEnv = process.env): string 
   return env.HOST_SESSION_SECRET?.trim() ?? "";
 }
 
+/** Production startup must not claim host readiness without its deployment secret. */
+export function requireHostSessionSecret(env: NodeJS.ProcessEnv = process.env): string {
+  const secret = hostSessionSecret(env);
+  if (!secret) {
+    throw new Error("BLOCKED-CONFIG: HOST_SESSION_SECRET");
+  }
+  return secret;
+}
+
 export function sessionMatches(
   provided: string | undefined,
   expected: string,

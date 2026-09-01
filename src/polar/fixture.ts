@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   CreateCheckoutInput,
   PolarCheckout,
@@ -7,46 +6,32 @@ import type {
   PolarPort,
 } from "./port.js";
 
-export function fixtureCheckoutUrl(checkoutId: string): string {
-  return `/checkout/complete?checkoutId=${encodeURIComponent(checkoutId)}`;
+/** Compatibility-only fixture symbol. Waffo owns even offline checkout. */
+export const FIXTURE_WAFFO_STORE_ID = "";
+export const FIXTURE_WAFFO_PRODUCT_ID = "";
+
+export function fixtureCheckoutUrl(_checkoutId: string): never {
+  throw new Error("BLOCKED-CONFIG: legacy payment adapter disabled; use Waffo");
 }
 
-function copyRecord(session: PolarCheckoutRecord): PolarCheckoutRecord {
-  return { ...session };
-}
-
-/** In-process Polar. Deterministic ids. No network. */
 export class FixturePolar implements PolarPort {
   readonly kind = "fixture" as const;
-  private readonly sessions = new Map<string, PolarCheckoutRecord>();
+  readonly productId: string | undefined = undefined;
+  readonly successUrl: string | undefined = undefined;
 
-  async createCheckout(input: CreateCheckoutInput): Promise<PolarCheckout> {
-    const checkoutId = `fix_${randomUUID()}`;
-    const url = fixtureCheckoutUrl(checkoutId);
-    this.sessions.set(checkoutId, {
-      ...input,
-      checkoutId,
-      url,
-      status: "pending",
-    });
-    return { checkoutId, url };
+  constructor() {
+    throw new Error("BLOCKED-CONFIG: legacy payment adapter disabled; use Waffo");
   }
 
-  getCheckout(checkoutId: string): PolarCheckoutRecord | undefined {
-    const session = this.sessions.get(checkoutId);
-    return session ? copyRecord(session) : undefined;
+  async createCheckout(_input: CreateCheckoutInput): Promise<PolarCheckout> {
+    throw new Error("BLOCKED-CONFIG: legacy payment adapter disabled; use Waffo");
   }
 
-  async completeCheckout(checkoutId: string): Promise<PolarPaid> {
-    const session = this.sessions.get(checkoutId);
-    if (!session) {
-      throw new Error(`unknown checkout ${checkoutId}`);
-    }
-    session.status = "paid";
-    return {
-      paid: true,
-      amountUsd: session.amountUsd,
-      checkoutId: session.checkoutId,
-    };
+  getCheckout(_checkoutId: string): PolarCheckoutRecord | undefined {
+    return undefined;
+  }
+
+  async completeCheckout(_checkoutId: string): Promise<PolarPaid> {
+    throw new Error("BLOCKED-CONFIG: legacy payment adapter disabled; use Waffo");
   }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Offline gate for main. Must exit 0 on a clean clone with no secrets.
 # When application code lands, add unit/contract tests here. Do not delete the
-# contract checks. Do not require live Polar or other third-party networks.
+# contract checks. Do not require live Waffo or other third-party networks.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,8 +41,7 @@ grep -q 'default \*\*on\*\* for `guest_seat`' SPEC.md \
   || grep -q 'default true iff seatKind === "guest_seat"' SPEC.md \
   || grep -q 'true when `seatKind === "guest_seat"`' SPEC.md \
   || fail "SPEC.md must default veto on for guest seat"
-grep -q 'Polar' SPEC.md || fail "SPEC.md missing Polar"
-grep -q 'fixture' SPEC.md || fail "SPEC.md missing fixture Polar"
+grep -q 'fixture' SPEC.md || fail "SPEC.md missing fixture payment mode"
 grep -q '/about' SPEC.md || fail "SPEC.md missing /about"
 grep -q '/rules' SPEC.md || fail "SPEC.md missing /rules"
 grep -q 'public click' SPEC.md || fail "SPEC.md missing public clicks"
@@ -52,16 +51,18 @@ grep -q 'Chat / NSFW' SPEC.md || fail "SPEC.md missing no chat/NSFW"
 echo "== BUILD PR plan through live-smoke =="
 grep -q '### PR 1:' BUILD.md || fail "BUILD.md missing ### PR 1:"
 grep -q '### PR 8: live-smoke' BUILD.md || fail "BUILD.md missing ### PR 8: live-smoke"
-grep -q 'PolarPort' BUILD.md || fail "BUILD.md missing PolarPort"
-grep -q 'POLAR_FIXTURE_ONLY' BUILD.md || fail "BUILD.md missing POLAR_FIXTURE_ONLY"
+grep -F -q '| Billing | `WaffoPort` — explicit `fixture`, `waffo-test`, or `waffo-prod` mode |' BUILD.md \
+  || fail "BUILD.md missing exact WaffoPort billing architecture"
+grep -F -q 'HTTP does not talk to Waffo except through `WaffoPort`.' BUILD.md \
+  || fail "BUILD.md missing Waffo-only provider boundary"
 grep -q 'guest_seat' BUILD.md || fail "BUILD.md missing guest_seat veto default"
 
 echo "== CI job ci is defined =="
 [[ -f .github/workflows/ci.yml ]] || fail "missing .github/workflows/ci.yml"
 grep -qE '^[[:space:]]*ci:[[:space:]]*$' .github/workflows/ci.yml \
   || fail "ci.yml missing job id ci"
-if grep -Eqi 'POLAR_LIVE=1|POLAR_ACCESS_TOKEN=' .github/workflows/ci.yml; then
-  fail "CI must not set live Polar"
+if grep -Eqi 'WAFFO_MODE[=:][[:space:]]*(waffo-test|waffo-prod)|WAFFO_(MERCHANT_ID|PRIVATE_KEY|STORE_ID|PRODUCT_ID)=' .github/workflows/ci.yml; then
+  fail "CI must remain fixture-only and must not contain live Waffo configuration"
 fi
 if grep -q 'scripts/live-smoke.sh' .github/workflows/ci.yml; then
   fail "live-smoke.sh must not be called from Actions"
@@ -91,16 +92,34 @@ if [[ -f package.json ]]; then
     fi
   fi
 
-  unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET HOST_SESSION_SECRET
-  export POLAR_FIXTURE_ONLY=1
-  [[ "${POLAR_LIVE:-}" != "1" ]] || fail "POLAR_LIVE must stay unset in test.sh"
-  [[ "${POLAR_FIXTURE_ONLY}" == "1" ]] || fail "POLAR_FIXTURE_ONLY must be 1 in test.sh"
+  unset HOST_SESSION_SECRET \
+    WAFFO_LIVE WAFFO_MERCHANT_ID WAFFO_STORE_ID WAFFO_PRODUCT_ID \
+    WAFFO_PRIVATE_KEY WAFFO_PRIVATE_KEY_FILE WAFFO_API_BASE \
+    WAFFO_PUBLIC_BASE_URL WAFFO_TEST_WEBHOOK_PUBLIC_KEY WAFFO_PROD_WEBHOOK_PUBLIC_KEY \
+    WAFFO_WEBHOOK_PUBLIC_KEY DATABASE_PATH
+  export WAFFO_MODE=fixture
+  [[ "${WAFFO_MODE}" == "fixture" ]] || fail "WAFFO_MODE must be fixture in test.sh"
+
+  echo "== exact Waffo SDK dependency =="
+  waffo_version="$(node -p "require('./node_modules/@waffo/pancake-ts/package.json').version" 2>/dev/null || true)"
+  [[ "$waffo_version" == "0.19.1" ]] || fail "installed @waffo/pancake-ts must be exactly 0.19.1 (got ${waffo_version:-missing})"
+  grep -q '"@waffo/pancake-ts": "0.19.1"' package.json \
+    || fail "package.json must pin @waffo/pancake-ts 0.19.1"
+  grep -q 'node_modules/@waffo/pancake-ts' package-lock.json \
+    || fail "package-lock.json must contain @waffo/pancake-ts"
 
   echo "== healthz source =="
   [[ -f src/app.ts ]] || fail "missing src/app.ts"
   [[ -f src/server.ts ]] || fail "missing src/server.ts"
   [[ -f src/http/routes/health.ts ]] || fail "missing src/http/routes/health.ts"
   grep -q '/healthz' src/http/routes/health.ts || fail "health route missing /healthz"
+  grep -q 'LISTEN_HOST' src/server.ts || fail "server must expose an explicit LISTEN_HOST"
+  grep -F -q 'LISTEN_HOST=127.0.0.1' .env.example \
+    || fail "host/systemd env must force LISTEN_HOST=127.0.0.1"
+  grep -F -q 'unset LISTEN_HOST' scripts/live-smoke.sh \
+    || fail "live-smoke must clear inherited LISTEN_HOST before setup"
+  grep -F -q 'export LISTEN_HOST=127.0.0.1' scripts/live-smoke.sh \
+    || fail "live-smoke child must force loopback LISTEN_HOST"
   grep -q 'ok: true' src/http/routes/health.ts || fail "health route missing { ok: true }"
   [[ -f tests/health.test.ts ]] || fail "missing tests/health.test.ts"
 
@@ -123,6 +142,16 @@ if [[ -f package.json ]]; then
   if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
     fail "src/tests must not hard-code polar.sh HTTP"
   fi
+  echo "== retired payment compatibility shims are inert =="
+  for f in src/polar/fixture.ts src/polar/live.ts src/polar/port.ts src/polar/waffo-session.ts; do
+    [[ -f "$f" ]] || fail "missing retired compatibility shim $f"
+    # Compatibility names may remain for old imports, but these files may not
+    # retain executable transport, crypto signing, filesystem secret reads, or
+    # obfuscated legacy endpoints.
+    if grep -nE 'fetch[[:space:]]*\(|node:(http|https)|XMLHttpRequest|https?://|api[._-]?polar|polar\.sh|create(Sign|Hash)|readFileSync|fromCharCode|base64|\.join[[:space:]]*\(' "$f" >/dev/null 2>&1; then
+      fail "$f contains executable legacy I/O or endpoint obfuscation"
+    fi
+  done
 
   echo "== rank engine source =="
   for f in src/rank.ts tests/rank.test.ts; do
@@ -135,11 +164,11 @@ if [[ -f package.json ]]; then
   grep -q 'full_bid_required' src/rank.ts \
     || fail "src/rank.ts missing full-bid reject for other bidders"
   grep -q 'rankListings' src/rank.ts || fail "src/rank.ts missing rankListings"
-  grep -q 'isPaidListing' src/rank.ts || fail "src/rank.ts missing isPaidListing Polar paid gate"
-  grep -q 'paidListings' src/rank.ts || fail "src/rank.ts missing paidListings Polar occupancy"
-  grep -q 'paidListings(listings)' src/rank.ts || fail "rankListings must rank Polar-paid rows only"
-  if grep -E 'PolarPort|/about|/rules|/go/' src/rank.ts >/dev/null; then
-    fail "rank engine must not add Polar or hygiene pages"
+  grep -q 'isPaidListing' src/rank.ts || fail "src/rank.ts missing isPaidListing provider-paid gate"
+  grep -q 'paidListings' src/rank.ts || fail "src/rank.ts missing paidListings provider occupancy"
+  grep -q 'paidListings(listings)' src/rank.ts || fail "rankListings must rank provider-paid rows only"
+  if grep -E 'WaffoPort|/about|/rules|/go/' src/rank.ts >/dev/null; then
+    fail "rank engine must not add provider or hygiene pages"
   fi
 
   echo "== URL hygiene + pages source =="
@@ -162,34 +191,50 @@ if [[ -f package.json ]]; then
     || fail "go route missing /go/:listingId"
   grep -q 'incrementListingClicks' src/http/routes/go.ts \
     || fail "go route missing click increment"
-  if grep -RInE 'createCheckout|PolarPort|POLAR_LIVE' src/hygiene.ts \
+  if grep -RInE 'createCheckout|WaffoPort|WAFFO_MODE' src/hygiene.ts \
     src/http/routes/pages.ts src/http/routes/go.ts >/dev/null 2>&1; then
-    fail "hygiene/pages/go must not start Polar checkout"
+    fail "hygiene/pages/go must not start a provider checkout"
   fi
 
   echo "== product UI (studio rundown) source =="
-  [[ -f src/views/skin.ts ]] || fail "missing src/views/skin.ts"
+  for f in src/http/routes/pages.ts src/views/skin.ts tests/pages.test.ts; do
+    [[ -s "$f" ]] || fail "missing or empty $f"
+  done
+  if grep -E 'renderPodcastReferencePage|outbid-reference-page' src/http/routes/pages.ts >/dev/null; then
+    fail "product page must not short-circuit into the shared reference renderer"
+  fi
+  for marker in 'data-slot="studio-board"' 'data-slot="episode-slate"' \
+    'data-slot="claim-console"' 'data-slot="cue-column"' 'data-slot="rundown-stack"'; do
+    grep -F -q "$marker" src/http/routes/pages.ts \
+      || fail "Studio Rundown identity is missing $marker"
+  done
+  for selector in '.studio-intro' '.rundown-desk' '.cue-column' '.rundown-column'; do
+    grep -F -q "$selector" src/views/skin.ts \
+      || fail "Studio Rundown identity CSS is missing $selector"
+  done
   grep -q 'Claim the' src/http/routes/pages.ts || fail "board missing claim chrome"
   grep -q 'Claim #1 for' src/http/routes/pages.ts || fail "empty-open claim missing Claim #1"
-  grep -q 'data-first-click="claim"' src/http/routes/pages.ts \
+  grep -F -q 'data-first-click="claim"' src/http/routes/pages.ts \
     || fail "empty-open Claim #1 missing first-click mark"
-  grep -q 'data-empty-claim-first' src/http/routes/pages.ts \
+  grep -F -q 'data-empty-claim-first' src/http/routes/pages.ts \
     || fail "empty-open claim missing empty-claim-first stamp"
-  grep -q 'empty-claim-first' src/http/routes/pages.ts \
+  grep -F -q 'empty-claim-first' src/http/routes/pages.ts \
     || fail "empty-open claim missing empty-claim-first class"
-  grep -q 'data-later-write' src/http/routes/pages.ts \
-    || fail "empty-open guest site missing later-write stamp"
-  grep -q 'data-listing-identity' src/http/routes/pages.ts \
-    || fail "empty-open guest site missing listing-identity wrap"
-  grep -q 'Then the guest site' src/http/routes/pages.ts \
-    || fail "empty-open must name the guest site as a later write"
-  grep -q 'listing-identity\[data-later-write\]' src/views/skin.ts \
-    || fail "empty-open CSS missing later-write guest-site composition"
-  grep -q 'Empty open: guest site is a later write' src/views/skin.ts \
-    || fail "empty-open CSS must document guest site as a later write after Claim #1"
-  if grep -nE 'data-empty-claim-after|data-claim-after-empty|empty-claim-after-[0-9]|lock-after-open-six' \
-    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; compose empty Claim #1 then the guest site"
+  grep -F -q 'data-studio-state' src/http/routes/pages.ts \
+    || fail "board missing compact studio state contract"
+  grep -F -q 'studio-all-vetoed' src/http/routes/pages.ts src/views/skin.ts \
+    || fail "all-vetoed board missing distinct visible state"
+  grep -F -q 'data-all-vetoed' src/http/routes/pages.ts \
+    || fail "all-vetoed board missing state marker"
+  grep -F -q '.studio.studio-all-vetoed .rundown[data-rundown]' src/views/skin.ts \
+    || fail "all-vetoed rundown visibility rule is missing"
+  grep -F -q 'data-claim-state' src/http/routes/pages.ts \
+    || fail "board missing compact claim state contract"
+  grep -F -q 'data-host-action' src/http/routes/pages.ts \
+    || fail "host desk missing single-action contract"
+  if grep -RInE 'Then the guest site|Then name, site, one-liner|lock-after-open|open-after-lock|data-later-write|data-listing-identity|data-later-claim' \
+    src/http/routes/pages.ts src/views/skin.ts tests/pages.test.ts >/dev/null 2>&1; then
+    fail "obsolete hop wording or numbered/staged residue remains"
   fi
   grep -q 'bid-stepper' src/http/routes/pages.ts || fail "board missing ± bid stepper"
   grep -q 'bid-field' src/http/routes/pages.ts || fail "board missing dashed \$amount"
@@ -199,490 +244,107 @@ if [[ -f package.json ]]; then
   grep -q 'guest-line' src/http/routes/pages.ts || fail "guest card missing one-liner"
   grep -q 'guest-site' src/http/routes/pages.ts || fail "guest card missing site"
   grep -q 'data-guest-prize' src/http/routes/pages.ts || fail "live ranked seat missing guest prize mark"
-  grep -q 'data-paid-at' src/http/routes/pages.ts || fail "live ranked seat missing Polar paid-at stamp"
-  grep -q 'data-guest-prize' src/views/skin.ts || fail "live ranked seat missing prize-before-price CSS"
-  grep -q 'data-paid-at' src/views/skin.ts || fail "occupied #1 prize CSS missing Polar paid-at"
+  grep -q 'data-paid-at' src/http/routes/pages.ts || fail "live ranked seat missing Waffo paid-at stamp"
   grep -q 'data-first-click="guest"' src/http/routes/pages.ts || fail "occupied #1 guest missing first-click mark"
-  grep -q 'data-first-click="guest"' src/views/skin.ts || fail "occupied #1 guest missing first-click CSS"
-  grep -q 'data-later-claim' src/http/routes/pages.ts || fail "occupied Claim missing later-claim stamp"
-  grep -q 'later-claim' src/http/routes/pages.ts || fail "occupied Claim missing later-claim class"
-  grep -q '"claim later-claim"' src/http/routes/pages.ts \
-    || fail "occupied Claim must compose later-claim, not a same-weight rail"
-  grep -q 'data-later-claim' src/views/skin.ts || fail "occupied later-claim CSS missing later-claim stamp"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim]' src/views/skin.ts \
-    || fail "occupied later-claim CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-title' src/views/skin.ts \
-    || fail "occupied later-claim title CSS must recede after the #1 guest"
-  grep -q 'Occupied live: Claim is a later write after the #1 guest' src/views/skin.ts \
-    || fail "occupied CSS must document Claim as a later write after the #1 guest"
+  grep -q '"claim occupied-claim"' src/http/routes/pages.ts \
+    || fail "occupied claim must use the compact occupied state"
+  grep -q 'data-identity-fields' src/http/routes/pages.ts \
+    || fail "empty and occupied claims must expose direct identity fields"
+  for marker in data-occupied-window data-occupied-raise data-raise-amount-field data-occupied-outbid data-occupied-form-hint; do
+    grep -q "$marker" src/http/routes/pages.ts || fail "occupied claim missing $marker"
+  done
+  grep -F -q '.studio.studio-open-occupied .claim[data-claim-state="open-occupied"]' src/views/skin.ts \
+    || fail "occupied CSS must use the compact claim state"
+  grep -F -q '.studio.studio-open-occupied .claim[data-claim-state="open-occupied"] .bid-field[data-raise-amount-field]' src/views/skin.ts \
+    || fail "occupied CSS missing dashed raise amount styling"
+  grep -F -q '[data-host-action="open"]' src/views/skin.ts \
+    || fail "host open CSS missing compact action state"
+  grep -F -q 'data-host-action="lock"' src/http/routes/pages.ts \
+    || fail "host lock desk missing compact action state"
   grep -q 'livePaidListings' src/rank.ts \
     || fail "rank engine missing livePaidListings rolling-week occupancy"
   grep -q 'bidInRollingWeek' src/rank.ts \
     || fail "rank engine missing bidInRollingWeek live window"
-  [[ -f src/window.ts ]] || fail "missing src/window.ts"
-  [[ -s src/window.ts ]] || fail "empty src/window.ts"
-  [[ -f tests/window.test.ts ]] || fail "missing tests/window.test.ts"
+  for f in src/window.ts tests/window.test.ts; do
+    [[ -s "$f" ]] || fail "missing or empty $f"
+  done
   grep -q 'ROLLING_WEEK_MS' src/window.ts || fail "src/window.ts missing ROLLING_WEEK_MS"
   grep -q 'rollingWeekStart' src/window.ts || fail "src/window.ts missing rollingWeekStart"
   grep -q 'bidInRollingWeek' src/window.ts || fail "src/window.ts missing bidInRollingWeek"
   grep -q 'data-rolling-week' src/http/routes/pages.ts \
     || fail "occupied live rundown missing data-rolling-week"
-  grep -q 'Rolling last 7 days' src/http/routes/pages.ts \
-    || fail "occupied live rundown missing rolling last-7-days copy"
-  grep -q 'Not Monday 00:00 UTC' src/http/routes/pages.ts \
-    || fail "occupied live rundown must reject Monday 00:00 UTC lock"
+  # The renderer states the invariant in user-facing copy: each paid
+  # placement remains eligible for seven days, and the window follows the
+  # placement timestamp instead of a civil Monday boundary. Keep these
+  # assertions tied to the current copy rather than the retired wording.
+  grep -F -q 'Paid placements remain eligible for seven days' src/http/routes/pages.ts \
+    || fail "occupied live rundown missing rolling seven-day copy"
+  grep -F -q 'does not reset at Monday midnight' src/http/routes/pages.ts \
+    || fail "occupied live rundown missing non-civil window invariant"
   grep -q 'class="week-window"' src/http/routes/pages.ts \
     || fail "occupied live rundown missing week-window"
-  grep -F -q '.studio.studio-open-occupied .rundown[data-rolling-week] .week-window[data-rolling-week]' src/views/skin.ts \
-    || fail "occupied rolling-week CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-rolling-week]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked rolling-week chrome"
-  grep -F -q '.studio.studio-open-empty [data-rolling-week]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked rolling-week without stamp-only"
-  grep -F -q '.studio.studio-open-empty .week-window' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked week-window class"
+  grep -F -q '.studio.studio-open-occupied .week-window[data-rolling-week]' src/views/skin.ts \
+    || fail "occupied rolling-week CSS must be scoped to Waffo-paid studio-open-occupied"
   grep -q 'Occupied live: rolling last-7-days window' src/views/skin.ts \
     || fail "occupied CSS must document rolling last-7-days window"
-  grep -q 'rolling last 7 days' SPEC.md \
-    || fail "SPEC.md missing rolling last-7-days occupied live window"
   grep -q 'class="empty-window"' src/http/routes/pages.ts \
-    || fail "empty-open missing empty-window copy (do not stamp occupied week-window onto empty)"
+    || fail "empty-open missing empty-window copy"
   grep -q 'data-empty-window' src/http/routes/pages.ts \
     || fail "empty-open missing data-empty-window rolling last-7-days certainty"
-  grep -q 'Live rank is the rolling last 7 days from paidAt' src/http/routes/pages.ts \
-    || fail "empty-open must name rolling last-7-days from paidAt"
   grep -q 'data-empty-claim-window' src/http/routes/pages.ts \
-    || fail "empty-open claim-note missing data-empty-claim-window rolling last-7-days certainty"
-  grep -q 'Empty open: name the fair occupied-rank window' src/views/skin.ts \
-    || fail "empty-open CSS must document rolling last-7-days copy, not occupied week-window"
+    || fail "empty-open claim-note missing data-empty-claim-window"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] .empty.open-seat[data-empty-honest] .empty-window[data-empty-window]' src/views/skin.ts \
     || fail "empty-open rolling-window CSS must be scoped to empty open-seat"
-  grep -q 'Empty open: claim-note names rolling last-7-days beside Claim #1' src/views/skin.ts \
-    || fail "empty-open CSS must document claim-note rolling last-7-days beside Claim #1"
   grep -F -q '.studio.studio-open-empty[data-empty-honest] .claim.empty-claim-first[data-empty-claim-first] .claim-note[data-empty-claim-window]' src/views/skin.ts \
-    || fail "empty-open claim-note rolling-window CSS must be scoped to empty Claim #1"
-  grep -q 'data-later-claim-window' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing data-later-claim-window rolling last-7-days certainty"
-  grep -q 'Occupied live: later-claim names rolling last-7-days beside Outbid' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim rolling last-7-days beside Outbid"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-window]' src/views/skin.ts \
-    || fail "occupied later-claim rolling-window CSS must be scoped to occupied later-claim"
-  grep -q 'data-later-claim-identity' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing later-claim-identity later write"
-  grep -q 'Then name, site, one-liner' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name identity as a later write after Outbid"
-  grep -q 'Occupied live: later-claim identity is a later write after Outbid' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim identity as a later write after Outbid"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .later-claim-identity[data-later-claim-identity]' src/views/skin.ts \
-    || fail "occupied later-claim identity CSS must be scoped to occupied later-claim"
-  grep -q 'data-later-claim-raise' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing data-later-claim-raise difference beside Outbid"
-  grep -q 'You pay only the difference' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name the raise difference beside Outbid"
-  grep -q 'Occupied live: later-claim names the raise difference beside Outbid' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim raise difference beside Outbid"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise]' src/views/skin.ts \
-    || fail "occupied later-claim raise CSS must be scoped to occupied later-claim"
-  grep -q 'data-later-claim-raise-amount' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing data-later-claim-raise-amount on dashed \$amount"
-  grep -q 'data-raise-amount-usd' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing Polar raise-difference amount on dashed \$amount"
-  grep -q 'Polar charges' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name the Polar charge as the raise difference on dashed \$amount"
-  grep -q 'Occupied live: later-claim names the Polar charge as the raise difference on the dashed' src/views/skin.ts \
-    || fail "occupied CSS must document Polar charge as the raise difference on dashed \$amount"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount]' src/views/skin.ts \
-    || fail "occupied later-claim raise-amount CSS must be scoped to occupied dashed \$amount"
-  grep -q 'data-new-bid-usd' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing Polar full new bid on dashed \$amount"
-  grep -q 'A new guest pays the full bid' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name that a new guest pays the full bid"
-  grep -q 'Occupied live: later-claim names Polar' src/views/skin.ts \
-    || fail "occupied CSS must document Polar full new bid for a new guest"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-new-bid-usd]' src/views/skin.ts \
-    || fail "occupied later-claim full-bid CSS must be scoped to occupied dashed \$amount"
-  grep -q 'data-raiser-polar-charge' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raiser Polar charge on dashed \$amount"
-  grep -q 'data-raise-lead-usd' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing Polar raise-lead amount when the guest is raising"
-  grep -q 'Same site: only the difference' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name Polar charges the raise difference for a same-site raiser"
-  grep -q 'data-live-listings' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing live listings so a raiser can match the same site"
-  grep -q 'Occupied live: later-claim Polar charge leads with the raise difference when the guest is raising' src/views/skin.ts \
-    || fail "occupied CSS must document Polar charge leading with the raise difference when raising"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raiser-polar-charge]' src/views/skin.ts \
-    || fail "occupied later-claim raiser Polar-charge CSS must be scoped to occupied dashed \$amount"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raise-lead-usd]' src/views/skin.ts \
-    || fail "occupied later-claim raise-lead CSS must be scoped to occupied dashed \$amount"
-  grep -q 'data-new-guest-claim-note' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing new-guest claim-note until a site is entered"
-  grep -q 'data-raiser-claim-note' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raiser claim-note after the same site is entered"
-  grep -q 'data-raiser-claim-usd' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raise-difference amount on the claim-note"
-  grep -q 'data-claim-note-lead' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing claim-note lead so a raiser is not told they pay a new bid"
-  grep -q 'the raise difference, not a full bid' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name the raise difference without telling a raiser they pay a new bid"
-  grep -q 'Occupied live: later-claim note names the raise difference after the same site is entered' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim note naming the raise difference after the same site"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-new-guest-claim-note]' src/views/skin.ts \
-    || fail "occupied later-claim new-guest note CSS must be scoped to occupied later-claim"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-note]' src/views/skin.ts \
-    || fail "occupied later-claim raiser note CSS must be scoped to occupied later-claim"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-claim-usd]' src/views/skin.ts \
-    || fail "occupied later-claim raiser note amount CSS must be scoped to occupied later-claim"
-  grep -q 'data-new-guest-form-hint' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing new-guest form-hint until a site is entered"
-  grep -q 'data-raiser-form-hint' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raiser form-hint after the same site is entered"
-  grep -q 'data-raiser-form-hint-usd' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raise-difference amount on the form-hint"
-  grep -q 'data-form-hint-lead' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing form-hint lead so a raiser is not told they pay a new bid"
-  grep -q 'data-later-claim-form-hint' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing later-claim-form-hint mark"
-  grep -q 'Already on this episode: you pay' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name the raise difference on the form-hint without telling a raiser they pay a new bid"
-  grep -q 'Occupied live: later-claim form-hint names the raise difference after the same site is entered' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim form-hint naming the raise difference after the same site"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-new-guest-form-hint]' src/views/skin.ts \
-    || fail "occupied later-claim new-guest form-hint CSS must be scoped to occupied later-claim"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-raiser-form-hint]' src/views/skin.ts \
-    || fail "occupied later-claim raiser form-hint CSS must be scoped to occupied later-claim"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-raiser-form-hint-usd]' src/views/skin.ts \
-    || fail "occupied later-claim raiser form-hint amount CSS must be scoped to occupied later-claim"
-  grep -q 'data-raiser-guest' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing raiser-guest after the same site is entered"
-  grep -q 'data-raiser-guest-name' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing matched guest name after the same site is entered"
-  grep -q 'Raising' src/http/routes/pages.ts \
-    || fail "occupied later-claim must name the matched guest being raised"
-  grep -q 'Occupied live: later-claim names the matched guest after the same site is entered' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim naming the matched guest after the same site"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .bid-field[data-later-claim-raise-amount] .raise-amount[data-raise-amount] [data-raiser-guest]' src/views/skin.ts \
-    || fail "occupied later-claim raiser-guest Polar CSS must be scoped to occupied dashed \$amount"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .claim-note[data-later-claim-raise] [data-raiser-guest]' src/views/skin.ts \
-    || fail "occupied later-claim raiser-guest note CSS must be scoped to occupied later-claim"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .form-hint[data-later-claim-form-hint] [data-raiser-guest]' src/views/skin.ts \
-    || fail "occupied later-claim raiser-guest form-hint CSS must be scoped to occupied later-claim"
-  grep -q 'data-later-claim-outbid' src/http/routes/pages.ts \
-    || fail "occupied later-claim missing Outbid mark so a raiser can see which guest the raise submits"
-  grep -q 'data-raiser-outbid-guest' src/http/routes/pages.ts \
-    || fail "occupied later-claim Outbid missing matched guest after the same site is entered"
-  grep -q 'data-raiser-outbid-guest-name' src/http/routes/pages.ts \
-    || fail "occupied later-claim Outbid missing matched guest name after the same site is entered"
-  grep -q 'Occupied live: later-claim Outbid names the matched guest after the same site is entered' src/views/skin.ts \
-    || fail "occupied CSS must document later-claim Outbid naming the matched guest after the same site"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .outbid[data-later-claim-outbid] [data-raiser-outbid-guest]' src/views/skin.ts \
-    || fail "occupied later-claim Outbid guest CSS must be scoped to occupied Outbid"
-  grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .outbid[data-later-claim-outbid] [data-raiser-outbid-guest-name]' src/views/skin.ts \
-    || fail "occupied later-claim Outbid guest-name CSS must be scoped to occupied Outbid"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-identity]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-identity"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-identity]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-identity without stamp-only"
-  grep -F -q '.studio.studio-open-empty .later-claim-identity' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-claim-identity class"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-raise]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-raise"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-raise]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-raise without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-raise-amount]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-raise-amount"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-raise-amount]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-raise-amount without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raise-amount]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raise-amount"
-  grep -F -q '.studio.studio-open-empty [data-raise-amount]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raise-amount without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-bid-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-bid-usd"
-  grep -F -q '.studio.studio-open-empty [data-new-bid-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-bid-usd without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-guest-polar-charge]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest Polar charge"
-  grep -F -q '.studio.studio-open-empty [data-new-guest-polar-charge]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest Polar charge without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-polar-charge]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser Polar charge"
-  grep -F -q '.studio.studio-open-empty [data-raiser-polar-charge]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser Polar charge without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raise-lead-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raise-lead-usd"
-  grep -F -q '.studio.studio-open-empty [data-raise-lead-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raise-lead-usd without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-guest-claim-note]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest claim-note"
-  grep -F -q '.studio.studio-open-empty [data-new-guest-claim-note]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest claim-note without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-note]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser claim-note"
-  grep -F -q '.studio.studio-open-empty [data-raiser-claim-note]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser claim-note without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-claim-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-claim-usd"
-  grep -F -q '.studio.studio-open-empty [data-raiser-claim-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-claim-usd without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-claim-note-lead]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied claim-note-lead"
-  grep -F -q '.studio.studio-open-empty [data-claim-note-lead]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied claim-note-lead without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-form-hint"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-form-hint without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-new-guest-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest form-hint"
-  grep -F -q '.studio.studio-open-empty [data-new-guest-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied new-guest form-hint without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser form-hint"
-  grep -F -q '.studio.studio-open-empty [data-raiser-form-hint]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser form-hint without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-form-hint-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-form-hint-usd"
-  grep -F -q '.studio.studio-open-empty [data-raiser-form-hint-usd]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-form-hint-usd without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-form-hint-lead]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied form-hint-lead"
-  grep -F -q '.studio.studio-open-empty [data-form-hint-lead]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied form-hint-lead without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-guest]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-guest"
-  grep -F -q '.studio.studio-open-empty [data-raiser-guest]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-guest without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-guest-name]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-guest-name"
-  grep -F -q '.studio.studio-open-empty [data-raiser-guest-name]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-guest-name without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-outbid]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-outbid"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-outbid]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-outbid without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-outbid-guest]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-outbid-guest"
-  grep -F -q '.studio.studio-open-empty [data-raiser-outbid-guest]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-outbid-guest without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-raiser-outbid-guest-name]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-outbid-guest-name"
-  grep -F -q '.studio.studio-open-empty [data-raiser-outbid-guest-name]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied raiser-outbid-guest-name without stamp-only"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-live-listings]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied live-listings"
-  grep -F -q '.studio.studio-open-empty [data-live-listings]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied live-listings without stamp-only"
-  grep -F -q '.studio.studio-open-empty .raise-amount' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked raise-amount class"
-  if grep -F -q '.studio.studio-open-occupied .claim.later-claim[data-later-claim] .listing-identity[data-later-write]' src/views/skin.ts; then
-    fail "do not stamp empty later-write onto occupied later-claim"
-  fi
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim-window]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-window"
-  grep -F -q '.studio.studio-open-empty [data-later-claim-window]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim-window without stamp-only"
-  if grep -nE 'lock-after-open-six|data-rolling-after|rolling-after-N|empty-window-after|data-empty-rolling-after|empty-claim-window-after|data-empty-claim-after|claim-window-after|later-claim-window-after|occupied-claim-window-after|data-later-claim-after|later-claim-identity-after|occupied-later-write-after|later-claim-raise-after|occupied-raise-after|raise-after-outbid|data-later-claim-raise-after|later-claim-raise-amount-after|occupied-raise-amount-after|raise-amount-after-outbid|data-later-claim-raise-amount-after|later-claim-new-bid-after|occupied-new-bid-after|new-bid-after-outbid|later-claim-full-bid-after|occupied-full-bid-after|later-claim-raise-lead-after|occupied-raise-lead-after|raise-lead-after-outbid|later-claim-raise-lead-N|occupied-raise-lead-N|later-claim-note-raise-after|occupied-claim-note-after|claim-note-raise-after|later-claim-note-after|occupied-note-raise-after|claim-note-lead-after|later-claim-form-hint-after|occupied-form-hint-after|form-hint-raise-after|later-claim-hint-after|form-hint-lead-after|occupied-hint-raise-after|form-hint-after-site|occupied-form-hint-N|later-claim-form-hint-N|later-claim-raise-guest-after|occupied-raise-guest-after|raise-guest-after|later-claim-guest-after|raiser-guest-after|occupied-guest-raise-after|raise-guest-after-site|later-claim-raise-guest-N|occupied-raise-guest-N|raiser-guest-after-site|later-claim-outbid-after|occupied-outbid-guest-after|outbid-guest-after|outbid-after-guest|later-claim-outbid-N|occupied-outbid-N|raiser-outbid-after|outbid-guest-after-site' \
-    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; name rolling last-7-days on empty copy"
-  fi
-  grep -F -q $'${ticket}\n${rundown}\n${claim}\n${desk}' src/http/routes/pages.ts \
-    || fail "occupied live Claim must render after the rundown, not above the #1 guest"
-  grep -q 'data-later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat mark"
-  grep -q 'later-seat' src/http/routes/pages.ts || fail "occupied later seat missing later-seat class"
-  grep -q 'data-later-seat' src/views/skin.ts || fail "occupied later seat missing later-seat CSS"
-  grep -q 'data-later-go' src/http/routes/pages.ts || fail "occupied later seat missing quieter /go mark"
-  grep -q 'later-name' src/http/routes/pages.ts || fail "occupied later seat missing quieter guest name"
-  grep -q 'data-later-foot' src/http/routes/pages.ts || fail "occupied later seat missing later-foot composition"
-  grep -q 'class="later-foot"' src/http/routes/pages.ts || fail "occupied later seat missing later-foot class"
-  grep -q 'guest.later-seat\[data-later-seat\]' src/views/skin.ts || fail "later seats must stay quieter than occupied #1"
-  grep -q 'later-foot\[data-later-foot\]' src/views/skin.ts || fail "later-foot CSS must keep /go and \$bid quieter than #1 guest"
-  grep -q 'export const STUDIO_CSS' src/views/skin.ts || fail "empty-open studio CSS missing STUDIO_CSS"
-  grep -q 'export const OCCUPIED_CSS' src/views/skin.ts || fail "occupied guest-one-first CSS missing OCCUPIED_CSS"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name' src/views/skin.ts \
-    || fail "occupied #1 guest prize CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .guest-name a[data-first-click="guest"]' src/views/skin.ts \
-    || fail "occupied #1 guest first-click CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -q 'class="later-facts"' src/http/routes/pages.ts \
-    || fail "occupied #1 guest missing later-facts composition"
-  grep -q 'data-later-facts' src/http/routes/pages.ts \
-    || fail "occupied #1 guest missing later-facts stamp"
-  grep -F -q '.studio.studio-open-occupied .guest[data-guest-prize][data-paid-at] .later-facts[data-later-facts]' src/views/skin.ts \
-    || fail "occupied #1 later-facts CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at]' src/views/skin.ts \
-    || fail "later-seat CSS must be scoped to Polar-paid studio-open-occupied"
-  grep -F -q '.studio.studio-open-occupied .guest.later-seat[data-later-seat][data-paid-at] .later-foot[data-later-foot]' src/views/skin.ts \
-    || fail "later-foot CSS must be scoped to Polar-paid studio-open-occupied"
-  if grep -E '^\.guest\[data-guest-prize\]' src/views/skin.ts >/dev/null; then
-    fail "guest-prize CSS must not leak globally onto empty open"
-  fi
-  if grep -E '^\.guest\.later-seat\[data-later-seat\]' src/views/skin.ts >/dev/null; then
-    fail "later-seat CSS must not leak globally onto empty open"
-  fi
-  if grep -E '^\.later-foot' src/views/skin.ts >/dev/null; then
-    fail "later-foot CSS must not leak globally onto empty open"
-  fi
-  if grep -E '^\.later-facts' src/views/skin.ts >/dev/null; then
-    fail "later-facts CSS must not leak globally onto empty open"
-  fi
-  if grep -nE 'data-prize-not-foot|data-later-foot-first|later-foot-after' \
-    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; compose prize later-facts vs later-foot"
-  fi
-  if grep -nE 'data-lock-after-rundown|data-guest-before-lock|lock-after-guest|data-lock-after-guest' \
-    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; compose occupied Lock after the rundown"
-  fi
-  if grep -nE 'data-guest-before-claim|data-claim-after-guest|claim-after-guest|guest-before-claim-N' \
-    src/http/routes/pages.ts src/views/skin.ts >/dev/null; then
-    fail "do not stamp another named hop; compose occupied Claim after the #1 guest"
-  fi
-  if grep -E '^\.claim\.later-claim' src/views/skin.ts >/dev/null; then
-    fail "later-claim CSS must not leak globally onto empty open"
-  fi
-  if grep -E '^\.later-claim' src/views/skin.ts >/dev/null; then
-    fail "later-claim CSS must not leak globally onto empty open"
-  fi
-  grep -q 'paidListings' src/http/routes/pages.ts \
-    || fail "rundown occupancy must compose Polar-paid rows only"
-  grep -q 'isPaidListing' src/http/routes/pages.ts \
-    || fail "guest card must refuse unpaid Polar checkout as #1"
-  grep -q 'isPaidListing' src/http/routes/go.ts \
-    || fail "/go must 404 unpaid Polar checkout"
-  if grep -nE 'data-unpaid-off|data-paid-only-rundown|data-unpaid-off-board|lock-after-open-six' \
-    src/http/routes/pages.ts src/views/skin.ts src/http/routes/go.ts >/dev/null; then
-    fail "unpaid-off occupancy must not add another named hop"
-  fi
-  grep -F -q $'${rundown}\n${claim}\n${desk}' src/http/routes/pages.ts \
-    || fail "occupied live host Lock must render after the rundown (Claim is a later write between them)"
-  grep -q 'data-later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid stamp"
-  grep -q 'later-fact' src/http/routes/pages.ts || fail "live ranked seat missing later-fact \$bid class"
-  grep -q 'data-later-fact' src/views/skin.ts || fail "live ranked seat missing later-fact \$bid CSS"
-  grep -q 'bid.later-fact\[data-later-fact\]' src/views/skin.ts || fail "later-fact \$bid must stay muted beside the guest label"
-  grep -q 'Polar cannot charge' src/http/routes/pages.ts \
-    || fail "empty episode must explain Polar cannot charge"
-  grep -q 'data-empty-board' src/http/routes/pages.ts || fail "board missing honest empty"
-  grep -q 'data-guest-skip' src/http/routes/pages.ts || fail "host desk missing guest-skip"
-  grep -q 'Guests skip this' src/http/routes/pages.ts || fail "host desk missing guests-skip copy"
-  grep -q 'data-host-lock' src/http/routes/pages.ts || fail "occupied board missing host lock desk"
-  grep -q 'class="lock-episode"' src/http/routes/pages.ts || fail "host lock desk missing lock-episode control"
-  grep -q 'class="open-next"' src/http/routes/pages.ts || fail "host desk missing open-next control"
-  grep -q 'data-open-next' src/http/routes/pages.ts || fail "locked host desk missing data-open-next"
-  grep -q 'data-open-after-lock' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock"
-  grep -q 'data-open-after-lock-first' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-first"
-  grep -q 'open-after-lock-first' src/views/skin.ts || fail "open-after-lock-first desk missing hop-local CSS"
-  grep -q 'data-open-after-lock-two' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-two"
-  grep -q 'open-after-lock-two' src/views/skin.ts || fail "open-after-lock-two desk missing hop-local CSS"
-  grep -q 'data-open-after-lock-three' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-three"
-  grep -q 'open-after-lock-three' src/views/skin.ts || fail "open-after-lock-three desk missing hop-local CSS"
-  grep -q 'data-open-after-lock-four' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-four"
-  grep -q 'open-after-lock-four' src/views/skin.ts || fail "open-after-lock-four desk missing hop-local CSS"
-  grep -q 'data-open-after-lock-five' src/http/routes/pages.ts || fail "locked host desk missing data-open-after-lock-five"
-  grep -q 'open-after-lock-five' src/views/skin.ts || fail "open-after-lock-five desk missing hop-local CSS"
-  grep -q 'data-lock-after-open' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open"
-  grep -q 'data-lock-after-open-first' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-first"
-  grep -q 'lock-after-open-first' src/views/skin.ts || fail "lock-after-open-first claim missing hop-local CSS"
-  grep -q 'data-lock-after-open-two' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-two"
-  grep -q 'lock-after-open-two' src/views/skin.ts || fail "lock-after-open-two claim missing hop-local CSS"
-  grep -q 'data-lock-after-open-three' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-three"
-  grep -q 'lock-after-open-three' src/views/skin.ts || fail "lock-after-open-three claim missing hop-local CSS"
-  grep -q 'data-lock-after-open-four' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-four"
-  grep -q 'lock-after-open-four' src/views/skin.ts || fail "lock-after-open-four claim missing hop-local CSS"
-  grep -q 'data-lock-after-open-five' src/http/routes/pages.ts || fail "locked claim missing data-lock-after-open-five"
-  grep -q 'lock-after-open-five' src/views/skin.ts || fail "lock-after-open-five claim missing hop-local CSS"
-  grep -q 'data-open-seat' src/http/routes/pages.ts || fail "fresh-open board missing data-open-seat"
-  grep -q 'data-empty-honest' src/http/routes/pages.ts || fail "fresh-open board missing empty-honest stamp"
-  grep -q 'data-empty-honest' src/views/skin.ts || fail "fresh-open board missing empty-honest CSS"
-  grep -q 'studio-open-empty' src/http/routes/pages.ts || fail "fresh-open board missing empty-open studio shell"
-  grep -q 'studio-open-occupied' src/http/routes/pages.ts || fail "occupied live board missing occupied studio shell"
-  grep -q 'studio-locked' src/http/routes/pages.ts || fail "locked board missing locked studio shell"
-  grep -q 'studio-open-empty' src/views/skin.ts || fail "empty-open shell missing isolation CSS"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-guest-prize]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked guest-prize chrome"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-first-click="guest"]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked #1 guest first-click"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-seat]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-seat chrome"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-go]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-seat /go"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-foot]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-foot chrome"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-facts]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-facts chrome"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-claim]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-paid-at]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked Polar paid-at chrome"
-  grep -F -q '.studio.studio-open-empty [data-guest-prize]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked guest-prize without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-first-click="guest"]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked #1 guest first-click without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-later-seat]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-seat without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-later-go]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-seat /go without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-later-foot]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-foot without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-later-facts]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-facts without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-later-claim]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked occupied later-claim without stamp-only"
-  grep -F -q '.studio.studio-open-empty [data-paid-at]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked Polar paid-at without stamp-only"
-  grep -F -q '.studio.studio-open-empty .later-fact' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-fact class"
-  grep -F -q '.studio.studio-open-empty .later-facts' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-facts class"
-  grep -F -q '.studio.studio-open-empty .later-claim' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-claim class"
-  grep -F -q '.studio.studio-open-empty .guest.later-seat' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-seat class"
-  grep -F -q '.studio.studio-open-empty .later-foot' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-foot class"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-later-fact]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked later-fact \$bid"
-  grep -F -q '.studio.studio-open-empty[data-empty-honest] [data-lock-certain]' src/views/skin.ts \
-    || fail "empty-open shell must hide leaked lock-certain chrome"
-  grep -F -q '.studio.studio-open-occupied .empty.open-seat' src/views/skin.ts \
-    || fail "occupied live board must hide empty-open \$5 slab"
-  grep -q 'function studioShell' src/http/routes/pages.ts || fail "board missing studioShell isolation"
-  if grep -Eq 'empty-honest-(first|six|after)|studio-after-empty-N' src/http/routes/pages.ts src/views/skin.ts; then
-    fail "empty-open isolation must not stamp *-after-*-N"
-  fi
-  grep -q 'data-claim-live' src/http/routes/pages.ts || fail "open claim missing data-claim-live"
+    || fail "empty-open claim-note CSS must be scoped to empty Claim #1"
+  grep -F -q '.claim[data-claim-state="locked"]' src/views/skin.ts \
+    || fail "locked CSS must use the compact claim state"
+  grep -F -q '.doc[data-checkout-state="locked"]' src/views/skin.ts \
+    || fail "locked checkout CSS must use the compact state"
   grep -q 'data-claim-locked' src/http/routes/pages.ts || fail "locked board missing data-claim-locked"
-  grep -q 'data-lock-certain' src/http/routes/pages.ts || fail "locked claim missing data-lock-certain"
-  grep -q 'data-lock-certain' src/views/skin.ts || fail "locked claim missing lock-certain CSS"
-  grep -q 'data-lock-409' src/http/routes/pages.ts || fail "locked claim missing data-lock-409"
-  grep -q 'data-lock-409' src/views/skin.ts || fail "locked checkout missing lock-409 CSS"
   grep -q 'data-next-seat' src/http/routes/pages.ts || fail "N+1 board missing data-next-seat"
   grep -q 'takes #1' src/http/routes/pages.ts || fail "fresh-open board missing \$5 takes #1"
   grep -q 'clicks' src/http/routes/pages.ts || fail "guest card missing public clicks"
+  grep -F -q 'Occupied live `/` ranks Waffo-paid `paidAt` in the **rolling last 7 days**.' SPEC.md \
+    || fail "SPEC.md missing exact rolling seven-day contract"
+  grep -F -q 'Not a civil-midnight lock. Not Monday 00:00 UTC.' SPEC.md \
+    || fail "SPEC.md missing non-civil Monday rolling-window contract"
   if grep -Eqi 'featured guest|play count|followers' src/http/routes/pages.ts src/views/skin.ts; then
     fail "product UI must not invent featured-guest art or play counts"
   fi
-
-  echo "== Polar checkout + fixture source =="
-  for f in src/polar/port.ts src/polar/fixture.ts src/polar/live.ts \
-    src/http/routes/checkout.ts tests/polar.test.ts; do
+  echo "== Waffo checkout + fixture source =="
+  for f in src/waffo/port.ts src/waffo/fixture.ts src/waffo/live.ts \
+    src/http/routes/checkout.ts tests/waffo.test.ts; do
     [[ -f "$f" ]] || fail "missing $f"
     [[ -s "$f" ]] || fail "empty $f"
   done
-  grep -q 'PolarPort' src/polar/port.ts || fail "src/polar/port.ts missing PolarPort"
-  grep -q 'createCheckout' src/polar/port.ts \
-    || fail "src/polar/port.ts missing createCheckout"
-  grep -q 'POLAR_FIXTURE_ONLY' src/polar/port.ts \
-    || fail "src/polar/port.ts missing POLAR_FIXTURE_ONLY"
-  grep -q 'FixturePolar' src/polar/fixture.ts \
-    || fail "src/polar/fixture.ts missing FixturePolar"
-  grep -q 'LivePolar' src/polar/live.ts || fail "src/polar/live.ts missing LivePolar"
-  grep -q 'POLAR_LIVE' src/polar/live.ts || fail "src/polar/live.ts missing POLAR_LIVE gate"
+  grep -q 'WaffoPort' src/waffo/port.ts || fail "src/waffo/port.ts missing WaffoPort"
+  grep -q 'createCheckout' src/waffo/port.ts \
+    || fail "src/waffo/port.ts missing createCheckout"
+  grep -q 'fixture' src/waffo/port.ts || fail "Waffo port missing fixture mode"
+  grep -q 'FixtureWaffo' src/waffo/fixture.ts \
+    || fail "src/waffo/fixture.ts missing FixtureWaffo"
+  grep -q 'LiveWaffo' src/waffo/live.ts || fail "src/waffo/live.ts missing LiveWaffo"
+  grep -q 'WAFFO_MODE' src/waffo/live.ts || fail "src/waffo/live.ts missing explicit mode gate"
   grep -q 'POST' src/http/routes/checkout.ts \
     || fail "src/http/routes/checkout.ts missing POST"
   grep -q '/checkout' src/http/routes/checkout.ts \
     || fail "src/http/routes/checkout.ts missing /checkout"
-  grep -q 'POLAR_FIXTURE_ONLY' tests/polar.test.ts \
-    || fail "tests/polar.test.ts missing fixture-wins"
+  grep -q 'Waffo mode truth table' tests/waffo.test.ts \
+    || fail "tests/waffo.test.ts missing Waffo truth table"
+  grep -q 'production cannot construct a fixture' tests/waffo.test.ts \
+    || fail "Waffo production fixture fail-closed regression is missing"
+  grep -q 'provider timeout leaves an unknown intent' tests/waffo.test.ts \
+    || fail "Waffo timeout recovery regression is missing"
+  grep -q 'normal app construction honors the fixture/live/missing/invalid Waffo mode matrix' tests/waffo.test.ts \
+    || fail "normal app Waffo mode matrix regression is missing"
+  grep -q 'money-field omission is distinct' tests/waffo.test.ts \
+    || fail "Waffo malformed-money regression is missing"
+  grep -q 'all-vetoed live board stays truthful' tests/pages.test.ts \
+    || fail "all-vetoed UI regression is missing"
+  if grep -RInE 'Polar (can|cannot|charges|did not charge)' src/http/routes/pages.ts src/views/skin.ts tests scripts/test.sh >/dev/null 2>&1; then
+    fail "active Waffo UI/operator/test copy must not identify the retired provider"
+  fi
   if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
     fail "src/tests must not hard-code polar.sh HTTP"
   fi
@@ -703,10 +365,12 @@ if [[ -f package.json ]]; then
   grep -q 'openNextEpisode' src/episodes.ts || fail "src/episodes.ts missing openNextEpisode"
   grep -q 'HOST_SESSION_SECRET' src/http/routes/host.ts \
     || fail "host route missing HOST_SESSION_SECRET"
+  grep -q 'requireHostSessionSecret' src/app.ts src/http/routes/host.ts \
+    || fail "production app must validate HOST_SESSION_SECRET"
   grep -q 'hostRoutes' src/app.ts || fail "src/app.ts must register hostRoutes"
-  if grep -Eqi 'POLAR_LIVE=1|https?://([^/]*\.)?polar\.sh' src/veto.ts \
+  if grep -Eqi 'WAFFO_MODE[=:][[:space:]]*(waffo-test|waffo-prod)|https?://([^/]*\.)?waffo\.ai' src/veto.ts \
     src/http/routes/host.ts tests/veto.test.ts; then
-    fail "veto/lock must stay offline (no live Polar)"
+    fail "veto/lock must stay offline (no live provider)"
   fi
 
   echo "== deploy artifacts (Dockerfile + runbook) =="
@@ -717,36 +381,83 @@ if [[ -f package.json ]]; then
   grep -qE '^USER[[:space:]]+node$' Dockerfile || fail "Dockerfile must run as non-root USER node"
   grep -q 'PORT' Dockerfile || fail "Dockerfile must honor PORT"
   grep -q 'src/server.ts' Dockerfile || fail "Dockerfile must start src/server.ts"
-  if grep -E 'POLAR_LIVE[[:space:]]*=[[:space:]]*(1|true|yes|on)' Dockerfile >/dev/null; then
-    fail "Dockerfile must not set POLAR_LIVE=1"
+  grep -F -q 'COPY public ./public' Dockerfile \
+    || fail "Dockerfile must copy public runtime assets"
+  grep -F -q 'test -s /app/public/icons/bitcoin.svg' Dockerfile \
+    || fail "Dockerfile must verify the bitcoin runtime asset"
+  grep -F -q 'LISTEN_HOST=0.0.0.0' Dockerfile \
+    || fail "Dockerfile must bind the container listener to 0.0.0.0"
+  [[ -s public/icons/bitcoin.svg ]] || fail "missing public/icons/bitcoin.svg"
+  [[ -f tests/deploy.test.ts ]] || fail "missing Docker/runtime deployment test"
+  grep -F -q 'Docker runtime staging copies public icons' tests/deploy.test.ts \
+    || fail "deployment test must stage and serve public icons"
+  if grep -E 'WAFFO_MODE[[:space:]]*=' Dockerfile >/dev/null; then
+    fail "Dockerfile must not select a Waffo mode"
   fi
-  if grep -E 'POLAR_(ACCESS_TOKEN|WEBHOOK_SECRET)[[:space:]]*=' Dockerfile >/dev/null; then
-    fail "Dockerfile must not bake Polar secrets"
+  if grep -E 'WAFFO_(MERCHANT_ID|PRIVATE_KEY|PRIVATE_KEY_FILE|STORE_ID|PRODUCT_ID|.*WEBHOOK_PUBLIC_KEY)[[:space:]]*=' Dockerfile >/dev/null; then
+    fail "Dockerfile must not bake Waffo credentials"
   fi
-  grep -q 'POLAR_LIVE' .env.example || fail ".env.example missing POLAR_LIVE"
-  grep -q 'POLAR_FIXTURE_ONLY' .env.example || fail ".env.example missing POLAR_FIXTURE_ONLY"
   grep -q 'DATABASE_PATH' .env.example || fail ".env.example missing DATABASE_PATH"
   grep -q 'HOST_SESSION_SECRET' .env.example || fail ".env.example missing HOST_SESSION_SECRET"
-  grep -q 'POLAR_ACCESS_TOKEN' .env.example || fail ".env.example missing POLAR_ACCESS_TOKEN"
-  grep -q 'POLAR_WEBHOOK_SECRET' .env.example || fail ".env.example missing POLAR_WEBHOOK_SECRET"
-  grep -q 'POLAR_API_BASE' .env.example || fail ".env.example missing POLAR_API_BASE"
-  grep -q 'POLAR_PRODUCT_ID' .env.example || fail ".env.example missing POLAR_PRODUCT_ID"
-  if grep -E '^[[:space:]]*POLAR_LIVE=1[[:space:]]*$' .env.example >/dev/null; then
-    fail ".env.example must not default POLAR_LIVE on"
+  grep -q 'WAFFO_MODE' .env.example || fail ".env.example missing WAFFO_MODE"
+  grep -q 'WAFFO_MERCHANT_ID' .env.example || fail ".env.example missing WAFFO_MERCHANT_ID"
+  grep -q 'WAFFO_PRIVATE_KEY' .env.example || fail ".env.example missing WAFFO_PRIVATE_KEY"
+  grep -q 'WAFFO_STORE_ID' .env.example || fail ".env.example missing WAFFO_STORE_ID"
+  grep -q 'WAFFO_PRODUCT_ID' .env.example || fail ".env.example missing WAFFO_PRODUCT_ID"
+  grep -q 'WAFFO_PUBLIC_BASE_URL' .env.example || fail ".env.example missing WAFFO_PUBLIC_BASE_URL"
+  grep -q 'WAFFO_TEST_WEBHOOK_PUBLIC_KEY' .env.example \
+    || fail ".env.example missing WAFFO_TEST_WEBHOOK_PUBLIC_KEY"
+  grep -q 'WAFFO_PROD_WEBHOOK_PUBLIC_KEY' .env.example \
+    || fail ".env.example missing WAFFO_PROD_WEBHOOK_PUBLIC_KEY"
+  if grep -E '^[[:space:]]*WAFFO_MODE=(waffo-test|waffo-prod)[[:space:]]*$' .env.example >/dev/null; then
+    fail ".env.example must not default to a live Waffo mode"
   fi
-  if grep -E '^[[:space:]]*POLAR_(ACCESS_TOKEN|WEBHOOK_SECRET)=' .env.example >/dev/null; then
-    fail ".env.example must keep Polar secrets commented"
+  if grep -E '^[[:space:]]*WAFFO_(MERCHANT_ID|PRIVATE_KEY|PRIVATE_KEY_FILE|STORE_ID|PRODUCT_ID|PUBLIC_BASE_URL|.*WEBHOOK_PUBLIC_KEY)=' .env.example >/dev/null 2>&1; then
+    fail "Waffo credentials must remain commented in .env.example"
   fi
-  grep -q 'POLAR_API_BASE' src/polar/port.ts || fail "src/polar/port.ts missing POLAR_API_BASE override"
-  grep -q 'polarApiBase' src/polar/live.ts || fail "src/polar/live.ts must honor POLAR_API_BASE"
+  [[ -f src/migrations/003_waffo_checkout_state.sql ]] \
+    || fail "missing durable Waffo checkout migration"
+  [[ -f src/migrations/004_waffo_business_payload.sql ]] \
+    || fail "missing Waffo replay-payload migration"
+  grep -q 'CREATE TABLE checkout_intents' src/migrations/003_waffo_checkout_state.sql \
+    || fail "checkout intent table missing"
+  grep -q 'CREATE TABLE waffo_checkout_events' src/migrations/003_waffo_checkout_state.sql \
+    || fail "Waffo event table missing"
+  grep -q 'CREATE TABLE waffo_webhook_attempts' src/migrations/003_waffo_checkout_state.sql \
+    || fail "Waffo webhook attempt table missing"
+  grep -q 'verifyWebhook' src/waffo/live.ts src/http/routes/checkout.ts \
+    || fail "webhook route must use Waffo official verifier"
+  grep -q 'order.completed' src/http/routes/checkout.ts \
+    || fail "webhook route must settle only order.completed"
+  grep -q 'subtotalCents' src/http/routes/checkout.ts \
+    || fail "webhook route must reconcile decimal subtotal"
+  grep -q 'business_payload' src/http/routes/checkout.ts src/migrations/004_waffo_business_payload.sql \
+    || fail "webhook route must persist complete replay payload"
+  grep -q 'transaction.immediate' src/http/routes/checkout.ts \
+    || fail "settlement must serialize across DB connections"
+  if grep -n 'waffo-session' src/http/routes/checkout.ts src/waffo/live.ts >/dev/null 2>&1; then
+    fail "v1 runtime must not import the quarantined Waffo adapter"
+  fi
   grep -q '/healthz' deploy/runbook.md || fail "runbook missing /healthz"
-  grep -q 'POLAR_LIVE=1' deploy/runbook.md || fail "runbook missing how to enable live Polar"
+  grep -q 'waffo-test' deploy/runbook.md || fail "runbook missing Waffo test mode"
+  grep -q 'waffo-prod' deploy/runbook.md || fail "runbook missing Waffo production mode"
+  grep -q '/webhooks/waffo' deploy/runbook.md || fail "runbook missing Waffo webhook endpoint"
+  grep -qi 'HTTPS' deploy/runbook.md || fail "runbook missing HTTPS boundary"
+  grep -qi 'durable' deploy/runbook.md || fail "runbook missing durable database requirement"
+  grep -qi 'reconciliation' deploy/runbook.md || fail "runbook missing reconciliation procedure"
+  grep -qi 'rollback' deploy/runbook.md || fail "runbook missing rollback procedure"
   grep -q 'docker build' deploy/runbook.md || fail "runbook missing docker build"
   grep -q 'docker run' deploy/runbook.md || fail "runbook missing docker run"
+  grep -F -q -- '-e LISTEN_HOST=0.0.0.0' deploy/runbook.md \
+    || fail "runbook must explicitly bind the Docker listener"
+  grep -F -q 'Environment=LISTEN_HOST=127.0.0.1' deploy/runbook.md \
+    || fail "runbook must force systemd host loopback"
+  grep -F -q 'fixture child to loopback despite inherited LISTEN_HOST' tests/live-smoke.test.ts \
+    || fail "live-smoke must regress inherited LISTEN_HOST values"
   grep -q 'Caddy' deploy/runbook.md || fail "runbook missing Caddy"
   grep -q 'guest seat' deploy/runbook.md || fail "runbook missing guest-seat product"
-  if grep -E 'POLAR_LIVE[[:space:]]*=[[:space:]]*1' .github/workflows/ci.yml >/dev/null; then
-    fail "CI must not set POLAR_LIVE=1"
+  if grep -E 'WAFFO_MODE[[:space:]]*=[[:space:]]*(waffo-test|waffo-prod)|WAFFO_(MERCHANT_ID|PRIVATE_KEY|STORE_ID|PRODUCT_ID)=' .github/workflows/ci.yml >/dev/null; then
+    fail "CI must not set live Waffo configuration"
   fi
 
   echo "== tsc --noEmit =="
@@ -762,165 +473,87 @@ if [[ -f package.json ]]; then
   [[ $test_status -eq 0 ]] || fail "unit tests failed"
   grep -Eq 'tests[[:space:]]+[1-9][0-9]*' "$test_log" \
     || fail "test runner reported 0 tests"
-  grep -q '/healthz' "$test_log" || fail "healthz test did not run"
-  grep -q 'new episode does not carry old bids' "$test_log" \
-    || fail "episode isolation test did not run"
-  grep -q 'guest-seat episode defaults vetoEnabled to true' "$test_log" \
-    || fail "guest_seat veto default test did not run"
-  grep -q '60-second episode defaults vetoEnabled to false' "$test_log" \
-    || fail "sixty_second_open veto default test did not run"
-  grep -q 'first bid $5 on empty guest-seat episode is rank #1 after payment' "$test_log" \
-    || fail "SPEC 1 rank test did not run"
-  grep -q 'bid $4 is rejected (min $5)' "$test_log" \
-    || fail "SPEC 2 rank test did not run"
-  grep -q 'two listings, $10 then $12' "$test_log" \
-    || fail "SPEC 3 rank test did not run"
-  grep -q 'older firstBidAt is #1' "$test_log" \
-    || fail "SPEC 4 rank test did not run"
-  grep -q 'raise own $10 to $13' "$test_log" \
-    || fail "SPEC 5 rank test did not run"
-  grep -q 'other bidder cannot pay only the $1 difference' "$test_log" \
-    || fail "SPEC 6 rank test did not run"
-  grep -q 'URL with ?utm_source=x is stored and /go has no query' "$test_log" \
-    || fail "SPEC 7 hygiene test did not run"
-  grep -q 'Discord / Telegram invite is rejected' "$test_log" \
-    || fail "SPEC 8 hygiene test did not run"
-  grep -q 'NSFW host is rejected' "$test_log" \
-    || fail "SPEC 9 hygiene test did not run"
-  grep -q 'public click /go/:id 302 + clicks increment' "$test_log" \
-    || fail "SPEC 15 public click test did not run"
-  grep -q 'GET /about describes the seat' "$test_log" \
-    || fail "about page test did not run"
-  grep -q 'GET /rules states min $5' "$test_log" \
-    || fail "rules page test did not run"
-  grep -q 'GET / with no episode keeps the claim visible' "$test_log" \
-    || fail "no-episode claim chrome test did not run"
-  grep -q 'GET / with no episode points first-time guests' "$test_log" \
-    || fail "no-episode waiting-path test did not run"
-  grep -q 'GET / with no episode shows a first-time host desk' "$test_log" \
-    || fail "no-episode host-desk test did not run"
-  grep -q 'GET / with no episode tells first-time guests to skip the host desk' "$test_log" \
-    || fail "guest-skip host-desk test did not run"
-  grep -q 'POST /host/open from the desk opens a guest-seat episode' "$test_log" \
-    || fail "host-open desk test did not run"
-  grep -q 'GET / on an occupied open episode makes locking the episode the host action' "$test_log" \
-    || fail "host-lock occupied desk test did not run"
-  grep -q 'POST /host/lock from the desk locks the occupied episode' "$test_log" \
-    || fail "host-lock desk post test did not run"
-  grep -q 'GET / after lock makes opening the next empty episode the host action' "$test_log" \
-    || fail "host-open next-episode test did not run"
-  grep -q 'GET / after lock makes the host desk the certain next host action' "$test_log" \
-    || fail "open-after-lock host-desk test did not run"
-  grep -q 'GET / after lock makes the locked episode certain for a first-time guest' "$test_log" \
-    || fail "locked-guest first-user test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after the host desk moved up' "$test_log" \
-    || fail "lock-after-open guest first-read test did not run"
-  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is first' "$test_log" \
-    || fail "open-after-lock-first host-desk test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is concentrated' "$test_log" \
-    || fail "lock-after-open-first guest first-read test did not run"
-  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is re-concentrated' "$test_log" \
-    || fail "open-after-lock-two host-desk test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is re-concentrated' "$test_log" \
-    || fail "lock-after-open-two guest first-read test did not run"
-  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is louder' "$test_log" \
-    || fail "open-after-lock-three host-desk test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is louder' "$test_log" \
-    || fail "lock-after-open-three guest first-read test did not run"
-  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is re-concentrated again' "$test_log" \
-    || fail "open-after-lock-four host-desk test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is re-concentrated again' "$test_log" \
-    || fail "lock-after-open-four guest first-read test did not run"
-  grep -q 'GET / after lock concentrates opening the next empty episode after the locked claim is re-concentrated again, once more' "$test_log" \
-    || fail "open-after-lock-five host-desk test did not run"
-  grep -q 'GET / after lock concentrates the locked episode after Open N+1 is re-concentrated again, once more' "$test_log" \
-    || fail "lock-after-open-five guest first-read test did not run"
-  grep -q 'GET / after lock keeps Episode N is locked the first read' "$test_log" \
-    || fail "lock-certain first-read test did not run"
-  grep -q 'GET / after lock still fail-closes checkout 409' "$test_log" \
-    || fail "locked checkout 409 test did not run"
-  grep -q 'GET / after the host opens N+1 makes bidding that empty seat live' "$test_log" \
-    || fail "N+1 first-guest bid test did not run"
-  grep -q 'GET / on a fresh-open empty episode makes bidding the guest seat live' "$test_log" \
-    || fail "open-seat first-guest test did not run"
-  grep -q 'GET / on a fresh-open empty episode stays empty-honest' "$test_log" \
-    || fail "fresh-open empty-honest test did not run"
-  grep -q 'GET / on a fresh-open empty episode isolates \$5 from lock / prize leak' "$test_log" \
-    || fail "fresh-open empty-open isolation test did not run"
-  grep -q 'GET / on a fresh-open empty episode keeps \$5 honest' "$test_log" \
-    || fail "fresh-open empty-open guest-one-first leak isolation test did not run"
-  grep -q 'GET / on a fresh-open empty episode has one first click' "$test_log" \
-    || fail "empty-open Claim #1 then guest-site later-write test did not run"
-  grep -q 'studio rundown is a guest card' "$test_log" \
-    || fail "studio guest-card test did not run"
-  grep -q 'GET / on a live ranked seat reads the guest label first' "$test_log" \
-    || fail "live prize-before-price test did not run"
-  grep -q 'GET / on an occupied live seat keeps \$bid a later fact' "$test_log" \
-    || fail "occupied live later-fact \$bid test did not run"
-  grep -q 'GET / on occupied live keeps #1 guest the first click' "$test_log" \
-    || fail "occupied live #1 guest first-click test did not run"
-  grep -q 'GET / on occupied live keeps later seats quieter than #1 guest' "$test_log" \
-    || fail "occupied live later-seat quiet test did not run"
-  grep -q 'GET / on occupied live keeps #1 guest prize chrome' "$test_log" \
-    || fail "occupied live prize-not-foot test did not run"
-  grep -q 'GET / on occupied live keeps one first click' "$test_log" \
-    || fail "occupied live host Lock after rundown test did not run"
-  grep -q 'Claim stays after the #1 guest' "$test_log" \
-    || fail "occupied live Claim after #1 guest leftover test did not run"
-  grep -q 'occupied week window is rolling last-7-days' "$test_log" \
-    || fail "occupied live rolling last-7-days window test did not run"
-  grep -q 'GET / on a fresh-open empty episode names rolling last-7-days' "$test_log" \
-    || fail "empty-open rolling last-7-days copy test did not run"
-  grep -q 'GET / on a fresh-open empty episode names rolling last-7-days on the claim-note' "$test_log" \
-    || fail "empty-open claim-note rolling last-7-days test did not run"
-  grep -q 'GET / on occupied live names rolling last-7-days on later-claim' "$test_log" \
-    || fail "occupied later-claim rolling last-7-days test did not run"
-  grep -q 'GET / on occupied live keeps later-claim identity a later write after Outbid' "$test_log" \
-    || fail "occupied later-claim identity later-write test did not run"
-  grep -q 'GET / on occupied live names the raise difference on later-claim' "$test_log" \
-    || fail "occupied later-claim raise difference beside Outbid test did not run"
-  grep -q 'GET / on occupied live names the Polar charge as the raise difference on later-claim dashed' "$test_log" \
-    || fail "occupied later-claim dashed \$amount raise difference test did not run"
-  grep -q 'GET / on occupied live names Polar' "$test_log" \
-    || fail "occupied later-claim new-guest full bid test did not run"
-  grep -q 'later-claim note names the raise difference after the same site' "$test_log" \
-    || fail "occupied later-claim note raise-difference after same site test did not run"
-  grep -q 'later-claim form-hint names the raise difference after the same site' "$test_log" \
-    || fail "occupied later-claim form-hint raise-difference after same site test did not run"
-  grep -q 'later-claim names the matched guest after the same site' "$test_log" \
-    || fail "occupied later-claim matched guest after same site test did not run"
-  grep -q 'later-claim Outbid names the matched guest after the same site' "$test_log" \
-    || fail "occupied later-claim Outbid matched guest after same site test did not run"
-  grep -q 'rolling last-7-days window is 7' "$test_log" \
-    || fail "rolling last-7-days window math test did not run"
-  grep -q 'Monday 00:00 UTC does not drop a bid still inside the rolling week' "$test_log" \
-    || fail "Monday midnight rolling-week test did not run"
-  grep -q 'unpaid stays off the rundown' "$test_log" \
-    || fail "unpaid stays off the rundown leftover test did not run"
-  grep -q 'No #1 guest until Polar reports paid' "$test_log" \
-    || fail "unpaid-off Polar paid leftover test did not run"
-  grep -q 'HTML Outbid form posts to /checkout' "$test_log" \
-    || fail "HTML Outbid form test did not run"
-  grep -q 'fixture checkout without network claims rank' "$test_log" \
-    || fail "SPEC 16 polar fixture test did not run"
-  grep -q 'POLAR_LIVE unset in test' "$test_log" \
-    || fail "SPEC 17 no-live-Polar test did not run"
-  grep -q 'POLAR_FIXTURE_ONLY=1 wins' "$test_log" \
-    || fail "POLAR_FIXTURE_ONLY wins test did not run"
-  grep -q 'guest-seat episode default flag is vetoEnabled === true' "$test_log" \
-    || fail "SPEC 10 guest-seat veto default test did not run"
-  grep -q '60-second episode default flag is vetoEnabled === false' "$test_log" \
-    || fail "SPEC 11 sixty-second veto default test did not run"
-  grep -q 'Veto #1 on guest seat' "$test_log" \
-    || fail "SPEC 12 veto #1 test did not run"
-  grep -q 'Veto when flag off is 403' "$test_log" \
-    || fail "SPEC 13 veto-when-off test did not run"
-  grep -q 'lock freezes the episode' "$test_log" \
-    || fail "lock freeze test did not run"
-  grep -q 'veto flag is frozen after the first paid bid' "$test_log" \
-    || fail "veto flag freeze test did not run"
-  if grep -Eqi 'polar\.(sh|in)|api\.polar' "$test_log"; then
-    fail "unit tests must not call live Polar hosts"
+  while IFS= read -r expected; do
+    [[ -z "$expected" ]] && continue
+    grep -F -q "$expected" "$test_log" || fail "expected regression did not run: $expected"
+  done <<'EOF'
+GET /healthz returns 200 { ok: true }
+new episode does not carry old bids
+guest-seat episode defaults vetoEnabled to true
+60-second episode defaults vetoEnabled to false
+first bid $5 on empty guest-seat episode is rank #1 after payment
+bid $4 is rejected (min $5)
+two listings, $10 then $12
+older firstBidAt is #1
+raise own $10 to $13
+other bidder cannot pay only the $1 difference
+URL with ?utm_source=x is stored and /go has no query
+Discord / Telegram invite is rejected
+NSFW host is rejected
+public click /go/:id 302 + clicks increment
+GET /about describes the seat
+GET /rules states the public bid, window, and host-review rules
+GET / with no episode keeps the claim visible
+GET / with no episode points first-time guests
+GET / with no episode shows a first-time host desk
+GET / with no episode tells first-time guests to skip the host desk
+POST /host/open from the desk opens a guest-seat episode
+GET / after lock still fail-closes checkout 409
+GET / after the host opens N+1 makes bidding that empty seat live
+GET / on a fresh-open empty episode makes bidding the guest seat live
+GET / on a fresh-open empty episode stays empty-honest
+GET / on a fresh-open empty episode isolates $5 from lock / prize leak
+GET / on a fresh-open empty episode keeps $5 honest
+studio rundown is a guest card
+GET / on a live ranked seat reads the guest label first
+GET / on an occupied live seat keeps $bid a later fact
+GET / on occupied live keeps #1 guest the first click
+GET / on occupied live keeps later seats quieter than #1 guest
+GET / on occupied live keeps #1 guest prize chrome
+GET / on occupied live keeps one first click
+occupied week window is rolling last-7-days
+GET / on a fresh-open empty episode names rolling last-7-days
+GET / on occupied live names rolling last-7-days on occupied-claim
+GET / on occupied live names the raise difference on occupied-claim
+GET / on occupied live names the Waffo charge as the raise difference
+GET / on occupied live names Waffo's full new bid
+GET / on occupied live Waffo charge leads with the raise difference
+occupied-claim note names the raise difference
+occupied-claim form-hint names the raise difference
+occupied-claim names the matched guest
+occupied-claim Outbid names the matched guest
+rolling last-7-days window is 7
+Monday 00:00 UTC does not drop a bid still inside the rolling week
+unpaid stays off the rundown
+HTML Outbid form posts to /checkout
+HTML checkout error copy is human-readable
+public claim identity fields have labels and a visible focus ring
+Docker runtime staging copies public icons and serves the loopback app
+offline smoke fixes the fixture child to loopback despite inherited LISTEN_HOST
+Waffo mode truth table is explicit
+normal app construction honors the fixture/live/missing/invalid Waffo mode matrix
+offline smoke rejects malformed LIVE_SMOKE_PORT before any request
+production cannot construct a fixture
+production app requires the configured durable database
+provider timeout leaves an unknown intent
+official anonymous checkout receives immutable Waffo parameters
+signed raw order.completed settles once
+invalid signature, wrong event, mode, store
+return URL never settles a live checkout
+stale captured raise enters reconciliation
+direct settlement serializes two deliveries
+migration restart recovers committed schema and partial additive migration
+Veto #1 on guest seat
+Veto when flag off is 403
+lock freezes the episode
+veto flag is frozen after the first paid bid
+EOF
+  provider_endpoint_regex='https?://([A-Za-z0-9-]+\.)*waffo\.(ai|test)(:[0-9]+)?([/?#]|$)'
+  if ! printf '%s\n' 'https://api.waffo.ai/v1/checkout' | grep -Eqi "$provider_endpoint_regex"; then
+    fail "unit-test provider-call guard does not recognize Waffo endpoints"
+  fi
+  if grep -Eqi "$provider_endpoint_regex" "$test_log"; then
+    fail "unit tests must not call live Waffo hosts"
   fi
 fi
 

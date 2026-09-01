@@ -1,6 +1,12 @@
+/**
+ * Source compatibility only. Runtime payment selection lives in
+ * `src/waffo`; these types and helpers intentionally have no provider I/O and
+ * never read or interpret legacy configuration.
+ */
 export type CheckoutKind = "open" | "raise";
 
 export type CreateCheckoutInput = {
+  intentId?: string;
   episodeId: string;
   listingId: string;
   amountUsd: number;
@@ -11,10 +17,7 @@ export type CreateCheckoutInput = {
   nextUsd: number;
 };
 
-export type PolarCheckout = {
-  checkoutId: string;
-  url: string;
-};
+export type PolarCheckout = { checkoutId: string; url: string };
 
 export type PolarPaid = {
   paid: true;
@@ -28,47 +31,43 @@ export type PolarCheckoutRecord = CreateCheckoutInput & {
   status: "pending" | "paid";
 };
 
-/** HTTP talks to Polar only through this port. */
 export type PolarPort = {
   readonly kind: "fixture" | "live";
+  readonly productId?: string;
+  readonly successUrl?: string;
   createCheckout(input: CreateCheckoutInput): Promise<PolarCheckout>;
   getCheckout(checkoutId: string): PolarCheckoutRecord | undefined;
-  /** Fixture complete or verified webhook. */
   completeCheckout(checkoutId: string): Promise<PolarPaid>;
+  requireWebhookSecret?: () => string;
 };
 
 export type PolarEnv = NodeJS.ProcessEnv;
 
-/** `POLAR_FIXTURE_ONLY=1` always wins. */
-export function polarFixtureOnly(env: PolarEnv = process.env): boolean {
-  return env.POLAR_FIXTURE_ONLY === "1";
+/** Legacy provider flags are inert. Waffo owns all runtime mode selection. */
+export function polarFixtureOnly(_env: PolarEnv = process.env): false {
+  return false;
 }
 
-export function polarLiveEnabled(env: PolarEnv = process.env): boolean {
-  if (polarFixtureOnly(env)) {
-    return false;
-  }
-  return env.POLAR_LIVE === "1";
+export function polarLiveEnabled(_env: PolarEnv = process.env): false {
+  return false;
 }
 
-export function polarAccessToken(env: PolarEnv = process.env): string {
-  return env.POLAR_ACCESS_TOKEN?.trim() ?? "";
+export function polarAccessToken(_env: PolarEnv = process.env): string {
+  return "";
 }
 
-export function polarWebhookSecret(env: PolarEnv = process.env): string {
-  return env.POLAR_WEBHOOK_SECRET?.trim() ?? "";
+export function polarWebhookSecret(_env: PolarEnv = process.env): string {
+  return "";
 }
 
-export function polarProductId(env: PolarEnv = process.env): string {
-  return env.POLAR_PRODUCT_ID?.trim() ?? "";
+export function polarProductId(_env: PolarEnv = process.env): string {
+  return "";
 }
 
-/** Override with `POLAR_API_BASE`. Default is production Polar; tests must not fetch it. */
-export function polarApiBase(env: PolarEnv = process.env): string {
-  const fromEnv = env.POLAR_API_BASE?.trim();
-  if (fromEnv) {
-    return fromEnv.replace(/\/$/, "");
-  }
-  const host = ["api", "polar", "sh"].join(".");
-  return `https://${host}`;
+export function polarSuccessUrl(_env: PolarEnv = process.env): string {
+  return "";
+}
+
+export function polarApiBase(_env: PolarEnv = process.env): never {
+  throw new Error("BLOCKED-CONFIG: legacy payment adapter disabled; use Waffo");
 }

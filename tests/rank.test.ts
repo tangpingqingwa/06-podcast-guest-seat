@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { after, mock, test } from "node:test";
 import { openDatabase } from "../src/db.js";
 import { createEpisode } from "../src/episodes.js";
 import { insertListing, type Listing } from "../src/listings.js";
@@ -18,6 +18,11 @@ import {
   rankedListingsForEpisode,
   type RankableListing,
 } from "../src/rank.js";
+
+// Keep default-now raise paths inside the rolling window for fixed fixtures.
+const TEST_NOW = new Date("2026-08-27T12:00:00.000Z");
+mock.timers.enable({ apis: ["Date"], now: TEST_NOW });
+after(() => mock.timers.reset());
 
 function memoryDb() {
   const db = openDatabase(":memory:");
@@ -334,14 +339,14 @@ test("unpaid and vetoed rows do not take rank", () => {
   );
 });
 
-test("unpaid stays off the rundown — No #1 guest until Polar reports paid", () => {
+test("unpaid stays off the rundown — No #1 guest until Waffo reports paid", () => {
   const unpaid = {
     ...paidListing({
       id: "lst_unpaid",
       episodeId: "ep_12",
       name: "Ghost Guest",
       siteUrl: "https://ghost.example/",
-      oneLiner: "Abandoned Polar checkout.",
+      oneLiner: "Abandoned Waffo checkout.",
       bidUsd: 99,
       firstBidAt: "2026-08-22T01:00:00.000Z",
     }),
@@ -353,7 +358,7 @@ test("unpaid stays off the rundown — No #1 guest until Polar reports paid", ()
       episodeId: "ep_12",
       name: "Vapor Co",
       siteUrl: "https://vapor.example/",
-      oneLiner: "Epoch paidAt is not Polar paid.",
+      oneLiner: "Epoch paidAt is not Waffo paid.",
       bidUsd: 80,
       firstBidAt: "2026-08-22T01:30:00.000Z",
     }),

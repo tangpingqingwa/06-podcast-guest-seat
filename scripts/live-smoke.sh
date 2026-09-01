@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Operator smoke against a local process. Not called from scripts/test.sh or CI.
-# Starts the product process and walks list → bid → rank → Polar fixture or
-# live checkout → public click → guest-seat veto.
-# Missing Polar secret on the live path is BLOCKED-SECRET with the exact env var.
+# Offline operator smoke for the one-VPS Node + SQLite process. It exercises
+# the documented fixture journey and deliberately makes zero provider calls.
+# Live Waffo checkout/webhook setup belongs to the deployment runbook.
 set -euo pipefail
+
+# The smoke owns its listener boundary. Never let a caller's host value affect
+# setup, URL construction, or the fixture child; the child is fixed explicitly
+# to loopback below.
+unset LISTEN_HOST || true
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -19,48 +23,58 @@ fi
 if [[ "${CI:-}" == "true" && "${LIVE_SMOKE_ALLOW_CI:-}" != "1" ]]; then
   fail "live-smoke refuses CI=true"
 fi
-
 command -v curl >/dev/null || fail "curl is required"
 command -v node >/dev/null || fail "node is required"
+[[ -d node_modules ]] || fail "node_modules is required; install dependencies before the offline smoke"
 
-if [[ ! -d node_modules ]]; then
-  if [[ -f package-lock.json ]]; then
-    npm ci
-  else
-    npm install
-  fi
+# This script is intentionally fixture-only. A caller that asks for a live
+# mode gets a successful, explicit no-call result before any process or DB is
+# created; an unknown mode is a configuration error rather than a fallback.
+requested_mode="${WAFFO_MODE:-fixture}"
+case "$requested_mode" in
+  fixture) ;;
+  waffo-test|waffo-prod)
+    echo "PASS-ERROR: WAFFO_MODE=${requested_mode}; offline smoke refused live provider calls"
+    exit 0
+    ;;
+  *)
+    fail "unsupported WAFFO_MODE=${requested_mode} (use fixture, waffo-test, or waffo-prod)"
+    ;;
+esac
+
+if [[ -n "${LIVE_SMOKE_BASE:-}" ]]; then
+  fail "LIVE_SMOKE_BASE is unsupported; the offline smoke owns its isolated fixture server"
 fi
 
-PASS=0
-PASS_ERROR=0
-BLOCKED=0
-FAIL=0
-STARTED_PID=""
-LIVE_PID=""
-WORKDIR=""
-RESULT_LOG=""
-BASE="${LIVE_SMOKE_BASE:-}"
+# Validate an operator-supplied port before it can participate in URL
+# construction or reach curl. A bounded decimal-only value also keeps the
+# child server's PORT input and the HTTP authority identical.
+if [[ "${LIVE_SMOKE_PORT+x}" == "x" ]]; then
+  if [[ ! "$LIVE_SMOKE_PORT" =~ ^[0-9]{1,5}$ ]]; then
+    fail "LIVE_SMOKE_PORT must be a pure decimal integer from 1 to 65535"
+  fi
+  port=$((10#$LIVE_SMOKE_PORT))
+  if (( port < 1 || port > 65535 )); then
+    fail "LIVE_SMOKE_PORT must be a pure decimal integer from 1 to 65535"
+  fi
+else
+  port=""
+fi
 
-# Capture operator Polar flags before the fixture process unsets them.
-OP_POLAR_LIVE="${POLAR_LIVE:-}"
-OP_POLAR_ACCESS_TOKEN="${POLAR_ACCESS_TOKEN:-}"
-OP_POLAR_WEBHOOK_SECRET="${POLAR_WEBHOOK_SECRET:-}"
-OP_POLAR_API_BASE="${POLAR_API_BASE:-}"
-OP_POLAR_PRODUCT_ID="${POLAR_PRODUCT_ID:-}"
-HOST_SECRET="${HOST_SESSION_SECRET:-live-smoke-host}"
+smoke_dir="$(mktemp -d "${TMPDIR:-/tmp}/podcast-guest-seat-live-smoke.XXXXXX")"
+server_pid=""
+base=""
+host_secret="${HOST_SESSION_SECRET:-live-smoke-host}"
+pass_count=0
+pass_error_count=0
+fail_count=0
 
 cleanup() {
-  if [[ -n "${LIVE_PID}" ]] && kill -0 "${LIVE_PID}" 2>/dev/null; then
-    kill "${LIVE_PID}" 2>/dev/null || true
-    wait "${LIVE_PID}" 2>/dev/null || true
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
   fi
-  if [[ -n "${STARTED_PID}" ]] && kill -0 "${STARTED_PID}" 2>/dev/null; then
-    kill "${STARTED_PID}" 2>/dev/null || true
-    wait "${STARTED_PID}" 2>/dev/null || true
-  fi
-  if [[ -n "${WORKDIR}" && -d "${WORKDIR}" ]]; then
-    rm -rf "${WORKDIR}"
-  fi
+  rm -rf "$smoke_dir"
 }
 trap cleanup EXIT
 
@@ -69,14 +83,10 @@ record() {
   local status="$2"
   local note="${3:-}"
   printf 'RESULT\t%s\t%s\t%s\n' "$flow" "$status" "$note"
-  if [[ -n "${RESULT_LOG}" ]]; then
-    printf '%s\t%s\t%s\n' "$flow" "$status" "$note" >>"${RESULT_LOG}"
-  fi
   case "$status" in
-    PASS) PASS=$((PASS + 1)) ;;
-    PASS-ERROR) PASS_ERROR=$((PASS_ERROR + 1)) ;;
-    BLOCKED-SECRET) BLOCKED=$((BLOCKED + 1)) ;;
-    FAIL) FAIL=$((FAIL + 1)) ;;
+    PASS) pass_count=$((pass_count + 1)) ;;
+    PASS-ERROR) pass_error_count=$((pass_error_count + 1)) ;;
+    FAIL) fail_count=$((fail_count + 1)) ;;
     *) fail "unknown smoke status ${status}" ;;
   esac
 }
@@ -86,19 +96,19 @@ pick_port() {
     import net from "node:net";
     const server = net.createServer();
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (addr === null || typeof addr === "string") process.exit(1);
-      process.stdout.write(String(addr.port));
+      const address = server.address();
+      if (address === null || typeof address === "string") process.exit(1);
+      process.stdout.write(String(address.port));
       server.close();
     });
   '
 }
 
 wait_health() {
-  local url="$1/healthz"
-  local i
-  for i in $(seq 1 80); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
+  local target="$1/healthz"
+  local attempt
+  for attempt in $(seq 1 80); do
+    if curl -fsS --connect-timeout 2 --max-time 5 "$target" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.1
@@ -106,91 +116,43 @@ wait_health() {
   return 1
 }
 
-seed_guest_seat() {
-  local db_path="$1"
-  local episode_id="$2"
-  local seed_js="${WORKDIR}/seed-episode.mjs"
-  cat >"${seed_js}" <<EOF
-import { openDatabase } from "file://${root}/src/db.ts";
-import { createEpisode } from "file://${root}/src/episodes.ts";
-
-const db = openDatabase(process.argv[2]);
-const episode = createEpisode(db, {
-  id: process.argv[3],
-  showId: "show_english",
-  label: "Episode 12",
-  seatKind: "guest_seat",
-  opensAt: new Date().toISOString(),
-});
-process.stdout.write(
-  JSON.stringify({ id: episode.id, vetoEnabled: episode.vetoEnabled, seatKind: episode.seatKind }),
-);
-db.close();
-EOF
-  node --import tsx "${seed_js}" "${db_path}" "${episode_id}"
-}
-
-start_fixture_server() {
-  local port="$1"
-  local db_path="$2"
-  local log_path="$3"
-  (
-    cd "$root"
-    unset POLAR_LIVE POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_API_BASE POLAR_PRODUCT_ID || true
-    export POLAR_FIXTURE_ONLY=1
-    export PORT="${port}"
-    export DATABASE_PATH="${db_path}"
-    export HOST_SESSION_SECRET="${HOST_SECRET}"
-    exec node --import tsx src/server.ts
-  ) >"${log_path}" 2>&1 &
-  echo $!
-}
-
 http_get() {
-  local base="$1"
-  local path="$2"
-  local out="$3"
-  curl -sS -o "$out" -w "%{http_code}" --connect-timeout 5 --max-time 20 \
-    "${base}${path}"
+  local path="$1"
+  local output="$2"
+  curl -sS -o "$output" -w '%{http_code}' --connect-timeout 5 --max-time 20 \
+    "$base$path"
 }
 
 http_get_headers() {
-  local base="$1"
-  local path="$2"
-  local body="$3"
-  local hdrs="$4"
-  curl -sS -D "$hdrs" -o "$body" -w "%{http_code}" --connect-timeout 5 --max-time 20 \
-    --max-redirs 0 \
-    "${base}${path}"
+  local path="$1"
+  local output="$2"
+  local headers="$3"
+  curl -sS -D "$headers" -o "$output" -w '%{http_code}' \
+    --connect-timeout 5 --max-time 20 --max-redirs 0 "$base$path"
 }
 
 http_post_json() {
-  local base="$1"
-  local path="$2"
-  local payload="$3"
-  local body="$4"
-  local hdrs="$5"
-  shift 5
-  curl -sS -D "$hdrs" -o "$body" -w "%{http_code}" --connect-timeout 5 --max-time 20 \
-    --max-redirs 0 \
-    -X POST \
-    -H "content-type: application/json" \
-    -H "accept: application/json" \
-    "$@" \
-    --data "$payload" \
-    "${base}${path}"
+  local path="$1"
+  local payload="$2"
+  local output="$3"
+  local headers="$4"
+  shift 4
+  curl -sS -D "$headers" -o "$output" -w '%{http_code}' \
+    --connect-timeout 5 --max-time 20 --max-redirs 0 \
+    -X POST -H 'content-type: application/json' -H 'accept: application/json' \
+    "$@" --data "$payload" "$base$path"
 }
 
 header_value() {
   local file="$1"
   local name="$2"
-  awk -v name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" '
+  awk -v wanted="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" '
     BEGIN { FS = ": " }
-    tolower($1) == name {
-      val = $0
-      sub(/^[^:]+:[ \t]*/, "", val)
-      gsub(/\r/, "", val)
-      print val
+    tolower($1) == wanted {
+      value = $0
+      sub(/^[^:]+:[ \t]*/, "", value)
+      gsub(/\r/, "", value)
+      print value
       exit
     }
   ' "$file"
@@ -199,401 +161,294 @@ header_value() {
 json_field() {
   node --input-type=module -e '
     import { readFileSync } from "node:fs";
-    const raw = readFileSync(process.argv[1], "utf8");
-    let data;
-    try { data = JSON.parse(raw); } catch { process.exit(2); }
-    const key = process.argv[2];
-    const value = data == null ? undefined : data[key];
-    if (value === undefined || value === null) process.exit(3);
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      process.stdout.write(String(value));
-      process.exit(0);
+    let value;
+    try {
+      const body = JSON.parse(readFileSync(process.argv[1], "utf8"));
+      value = body?.[process.argv[2]];
+    } catch {
+      process.exit(2);
     }
-    process.stdout.write(JSON.stringify(value));
+    if (value === undefined || value === null) process.exit(3);
+    if (["string", "number", "boolean"].includes(typeof value)) {
+      process.stdout.write(String(value));
+    } else {
+      process.stdout.write(JSON.stringify(value));
+    }
   ' "$1" "$2"
 }
 
-html_has() {
+row_attr() {
   local file="$1"
-  local pattern="$2"
-  grep -Eq "$pattern" "$file"
-}
-
-row_for_name() {
+  local name="$2"
+  local attribute="$3"
   node --input-type=module -e '
     import { readFileSync } from "node:fs";
     const html = readFileSync(process.argv[1], "utf8");
     const name = process.argv[2];
-    const rows = [...html.matchAll(/<tr data-listing-id="[^"]+"[\s\S]*?<\/tr>/g)].map((m) => m[0]);
-    for (const row of rows) {
-      if (row.includes(name)) {
-        process.stdout.write(row);
-        process.exit(0);
-      }
-    }
-    process.exit(2);
-  ' "$1" "$2"
-}
-
-attr_from_row() {
-  local row_html="$1"
-  local attr="$2"
-  node --input-type=module -e '
-    const row = process.argv[1];
-    const attr = process.argv[2];
-    const match = row.match(new RegExp(`data-${attr}="([^"]*)"`));
-    if (!match) process.exit(2);
+    const attribute = process.argv[3];
+    const rows = [...html.matchAll(/<li\b[^>]*data-listing-id="[^"]+"[\s\S]*?<\/li>/g)]
+      .map((match) => match[0]);
+    const row = rows.find((candidate) => candidate.includes(name));
+    if (!row) process.exit(2);
+    const match = row.match(new RegExp(`data-${attribute}="([^"]*)"`));
+    if (!match) process.exit(3);
     process.stdout.write(match[1]);
-  ' "$row_html" "$attr"
+  ' "$file" "$name" "$attribute"
 }
 
-clicks_from_row() {
+row_for_name() {
+  local file="$1"
+  local name="$2"
   node --input-type=module -e '
-    const row = process.argv[1];
-    const match = row.match(/(\d+) clicks/);
-    if (!match) process.exit(2);
-    process.stdout.write(match[1]);
-  ' "$1"
+    import { readFileSync } from "node:fs";
+    const html = readFileSync(process.argv[1], "utf8");
+    const name = process.argv[2];
+    const rows = [...html.matchAll(/<li\b[^>]*data-listing-id="[^"]+"[\s\S]*?<\/li>/g)]
+      .map((match) => match[0]);
+    const row = rows.find((candidate) => candidate.includes(name));
+    if (!row) process.exit(2);
+    process.stdout.write(row);
+  ' "$file" "$name"
 }
 
-WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/podcast-guest-seat-live-smoke.XXXXXX")"
-RESULT_LOG="${WORKDIR}/results.tsv"
-: >"${RESULT_LOG}"
-STAMP="$(date -u +%Y%m%d%H%M%S)"
-EPISODE_ID="ep_smoke_${STAMP}"
-ADA_NAME="Ada Lovelace ${STAMP}"
-TWELVE_NAME="Twelve Co ${STAMP}"
-ADA_URL="https://ada-${STAMP}.example/guest"
-TWELVE_URL="https://twelve-${STAMP}.example/seat"
+row_clicks() {
+  local file="$1"
+  local name="$2"
+  node --input-type=module -e '
+    import { readFileSync } from "node:fs";
+    const html = readFileSync(process.argv[1], "utf8");
+    const name = process.argv[2];
+    const rows = [...html.matchAll(/<li\b[^>]*data-listing-id="[^"]+"[\s\S]*?<\/li>/g)]
+      .map((match) => match[0]);
+    const row = rows.find((candidate) => candidate.includes(name));
+    if (!row) process.exit(2);
+    const match = row.match(/class="clicks"[^>]*>([0-9]+) clicks/);
+    if (!match) process.exit(3);
+    process.stdout.write(match[1]);
+  ' "$file" "$name"
+}
 
-echo "== live-smoke (operator only; not CI) =="
-echo "root=${root}"
+html_has() {
+  local file="$1"
+  local text="$2"
+  grep -F -q -- "$text" "$file"
+}
 
-if [[ -z "${BASE}" ]]; then
-  PORT="${LIVE_SMOKE_PORT:-$(pick_port)}"
-  BASE="http://127.0.0.1:${PORT}"
-  DB_PATH="${WORKDIR}/guest-seat.sqlite"
-  LOG_PATH="${WORKDIR}/server.log"
-  echo "seeding guest-seat episode ${EPISODE_ID} into ${DB_PATH}"
-  seed_json="${WORKDIR}/seed.json"
-  seed_guest_seat "$DB_PATH" "$EPISODE_ID" >"${seed_json}"
-  seed_veto="$(json_field "$seed_json" "vetoEnabled" || true)"
-  if [[ "$seed_veto" != "true" ]]; then
-    fail "seeded episode must default vetoEnabled true for guest_seat (got ${seed_veto})"
-  fi
-  echo "starting local fixture server on ${BASE}"
-  echo "database=${DB_PATH}"
-  STARTED_PID="$(start_fixture_server "$PORT" "$DB_PATH" "$LOG_PATH")"
-  if ! wait_health "$BASE"; then
-    echo "server log:" >&2
-    cat "${LOG_PATH}" >&2 || true
-    fail "local server did not become healthy at ${BASE}/healthz"
-  fi
-else
-  BASE="${BASE%/}"
-  echo "assuming existing server at ${BASE}"
-  if ! wait_health "$BASE"; then
-    fail "existing server at ${BASE} did not answer /healthz"
-  fi
+assert_status() {
+  local actual="$1"
+  local expected="$2"
+  local label="$3"
+  [[ "$actual" == "$expected" ]] || fail "$label (HTTP ${actual}, expected ${expected})"
+}
+
+stamp="$(date -u +%Y%m%d%H%M%S)"
+episode_id="ep_smoke_${stamp}"
+ada_name="Smoke Ada ${stamp}"
+twelve_name="Smoke Twelve ${stamp}"
+ada_url="https://ada-${stamp}.example/guest"
+twelve_url="https://twelve-${stamp}.example/seat"
+
+if [[ -z "$port" ]]; then
+  port="$(pick_port)"
+fi
+base="http://127.0.0.1:${port}"
+db_path="${smoke_dir}/guest-seat.sqlite"
+server_log="${smoke_dir}/server.log"
+
+seed_json="$(node --import tsx --input-type=module -e '
+  import { openDatabase } from "./src/db.ts";
+  import { createEpisode } from "./src/episodes.ts";
+  const db = openDatabase(process.argv[1]);
+  const episode = createEpisode(db, {
+    id: process.argv[2],
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: new Date().toISOString(),
+  });
+  process.stdout.write(JSON.stringify({
+    id: episode.id,
+    seatKind: episode.seatKind,
+    vetoEnabled: episode.vetoEnabled,
+  }));
+  db.close();
+' "$db_path" "$episode_id")"
+[[ "$(json_field <(printf '%s' "$seed_json") seatKind)" == "guest_seat" ]] \
+  || fail "seeded episode is not guest_seat"
+[[ "$(json_field <(printf '%s' "$seed_json") vetoEnabled)" == "true" ]] \
+  || fail "guest-seat episode did not default host veto on"
+[[ -f "$db_path" ]] || fail "fixture seed did not create the isolated SQLite database"
+
+# Keep every provider selector/credential out of the local process. Also clear
+# deployment markers so a caller's production shell cannot turn the offline
+# fixture into a live startup.
+(
+  unset NODE_ENV VERCEL_ENV APP_ENV DEPLOY_ENV BUILD_ENV \
+    WAFFO_MODE WAFFO_LIVE WAFFO_MERCHANT_ID WAFFO_PRIVATE_KEY \
+    WAFFO_PRIVATE_KEY_FILE WAFFO_STORE_ID WAFFO_PRODUCT_ID \
+    WAFFO_PUBLIC_BASE_URL WAFFO_API_BASE WAFFO_TEST_WEBHOOK_PUBLIC_KEY \
+    WAFFO_PROD_WEBHOOK_PUBLIC_KEY WAFFO_WEBHOOK_PUBLIC_KEY DATABASE_PATH || true
+  export WAFFO_MODE=fixture
+  export LISTEN_HOST=127.0.0.1
+  export PORT="$port" DATABASE_PATH="$db_path" HOST_SESSION_SECRET="$host_secret"
+  exec node --import tsx src/server.ts
+) >"$server_log" 2>&1 &
+server_pid=$!
+
+if ! wait_health "$base"; then
+  sed -n '1,160p' "$server_log" >&2 || true
+  fail "fixture server did not become healthy at ${base}/healthz"
 fi
 
-echo "base=${BASE}"
-echo "operator POLAR_LIVE=${OP_POLAR_LIVE:-<unset>}"
-if [[ -n "${OP_POLAR_API_BASE}" ]]; then
-  echo "operator POLAR_API_BASE is set (len=${#OP_POLAR_API_BASE})"
-else
-  echo "operator POLAR_API_BASE=<unset>"
+# Fastify logs the actual listener URLs. Keep this evidence in the smoke
+# output so a regression test can prove inherited/malformed LISTEN_HOST values
+# did not move the fixture process off loopback.
+listener_urls="$(grep -F 'Server listening at http://' "$server_log" || true)"
+[[ -n "$listener_urls" ]] || fail "fixture server log omitted its listener URL"
+if printf '%s\n' "$listener_urls" | grep -Fv -q "Server listening at http://127.0.0.1:${port}"; then
+  fail "fixture server logged a non-loopback listener"
 fi
+echo "LISTENER PASS: fixture child bound only to 127.0.0.1:${port}"
 
-# --- healthz (process is up) ---
-health_body="${WORKDIR}/healthz.json"
-health_code="$(http_get "$BASE" "/healthz" "$health_body" || true)"
-if [[ "$health_code" != "200" ]] || ! grep -q '"ok":true' "$health_body"; then
-  fail "GET /healthz HTTP ${health_code}"
-fi
+health_body="${smoke_dir}/healthz.json"
+health_code="$(http_get /healthz "$health_body" || true)"
+assert_status "$health_code" 200 "GET /healthz"
+html_has "$health_body" '"ok":true' || fail "healthz did not return { ok: true }"
 
-# --- list: current episode board (empty paid rows is honest) ---
-board0="${WORKDIR}/board0.html"
-board0_code="$(http_get "$BASE" "/" "$board0" || true)"
-if [[ "$board0_code" == "200" ]] \
-  && html_has "$board0" 'guest seat' \
-  && html_has "$board0" 'default on for guest seat' \
-  && html_has "$board0" 'data-empty-board' \
-  && html_has "$board0" 'No paid listings on this episode yet' \
-  && ! html_has "$board0" 'data-listing-id=' \
-  && ! html_has "$board0" "${ADA_NAME}" \
-  && ! html_has "$board0" "${TWELVE_NAME}"; then
-  record "list" "PASS" "GET / 200 empty guest-seat board; veto default on; no invented listings"
-else
-  record "list" "FAIL" "GET / HTTP ${board0_code} empty guest-seat list contract broken"
-fi
+# list: a new local fixture board starts empty and does not invent a bidder.
+board_empty="${smoke_dir}/board-empty.html"
+board_empty_code="$(http_get / "$board_empty" || true)"
+assert_status "$board_empty_code" 200 "GET /"
+html_has "$board_empty" 'data-empty-board' || fail "empty fixture board missing data-empty-board"
+html_has "$board_empty" 'No paid listings on this episode yet' \
+  || fail "empty fixture board missing honest no-paid copy"
+html_has "$board_empty" 'data-empty-window' \
+  || fail "empty fixture board missing rolling-window marker"
+! html_has "$board_empty" 'data-listing-id=' \
+  || fail "empty fixture board contains an invented listing"
+html_has "$board_empty" "value=\"${episode_id}\"" \
+  || fail "fixture server is not serving the isolated seeded episode"
+html_has "$board_empty" 'data-seat-kind="guest_seat"' \
+  || fail "board did not identify the guest-seat lane"
+record list PASS "GET / 200; explicit fixture; no invented paid row"
 
-# --- bid: $4 is a documented reject; $5 starts checkout and stays off the board until paid ---
-bid4_body="${WORKDIR}/bid4.json"
-bid4_hdrs="${WORKDIR}/bid4.hdrs"
-bid4_code="$(http_post_json "$BASE" "/checkout" \
-  "{\"episodeId\":\"${EPISODE_ID}\",\"name\":\"${ADA_NAME}\",\"siteUrl\":\"${ADA_URL}?utm_source=x\",\"oneLiner\":\"Notes on the analytical engine.\",\"bidUsd\":4}" \
-  "$bid4_body" "$bid4_hdrs" || true)"
-bid4_err="$(json_field "$bid4_body" "error" || true)"
-board_bid4="${WORKDIR}/board-bid4.html"
-http_get "$BASE" "/" "$board_bid4" >/dev/null || true
+# bid: minimum $5 is enforced, and an unpaid checkout never appears publicly.
+bid4_body="${smoke_dir}/bid4.json"
+bid4_headers="${smoke_dir}/bid4.headers"
+bid4_payload="{\"episodeId\":\"${episode_id}\",\"name\":\"${ada_name}\",\"siteUrl\":\"${ada_url}?utm_source=smoke\",\"oneLiner\":\"Notes on the analytical engine.\",\"bidUsd\":4}"
+bid4_code="$(http_post_json /checkout "$bid4_payload" "$bid4_body" "$bid4_headers" || true)"
+bid4_error="$(json_field "$bid4_body" error || true)"
+assert_status "$bid4_code" 400 "POST /checkout \$4"
+[[ "$bid4_error" == "min_bid" ]] || fail "\$4 rejection was ${bid4_error:-missing error}"
 
-bid5_body="${WORKDIR}/bid5.json"
-bid5_hdrs="${WORKDIR}/bid5.hdrs"
-bid5_code="$(http_post_json "$BASE" "/checkout" \
-  "{\"episodeId\":\"${EPISODE_ID}\",\"name\":\"${ADA_NAME}\",\"siteUrl\":\"${ADA_URL}?utm_source=x\",\"oneLiner\":\"Notes on the analytical engine.\",\"bidUsd\":5}" \
-  "$bid5_body" "$bid5_hdrs" || true)"
-bid5_id="$(json_field "$bid5_body" "checkoutId" || true)"
-bid5_url="$(json_field "$bid5_body" "url" || true)"
-bid5_kind="$(json_field "$bid5_body" "kind" || true)"
-bid5_charge="$(json_field "$bid5_body" "chargeUsd" || true)"
-board_bid5="${WORKDIR}/board-bid5.html"
-http_get "$BASE" "/" "$board_bid5" >/dev/null || true
+bid5_body="${smoke_dir}/bid5.json"
+bid5_headers="${smoke_dir}/bid5.headers"
+bid5_payload="{\"episodeId\":\"${episode_id}\",\"name\":\"${ada_name}\",\"siteUrl\":\"${ada_url}?utm_source=smoke\",\"oneLiner\":\"Notes on the analytical engine.\",\"bidUsd\":5}"
+bid5_code="$(http_post_json /checkout "$bid5_payload" "$bid5_body" "$bid5_headers" || true)"
+assert_status "$bid5_code" 200 "POST /checkout \$5"
+bid5_id="$(json_field "$bid5_body" checkoutId || true)"
+bid5_url="$(json_field "$bid5_body" url || true)"
+bid5_kind="$(json_field "$bid5_body" kind || true)"
+bid5_charge="$(json_field "$bid5_body" chargeUsd || true)"
+[[ -n "$bid5_id" && "$bid5_kind" == "open" && "$bid5_charge" == "5" ]] \
+  || fail "fixture \$5 checkout omitted its open/\$5 contract"
+[[ "$bid5_url" == /checkout/complete\?checkoutId=* ]] \
+  || fail "fixture checkout did not return its local completion URL"
+board_unpaid="${smoke_dir}/board-unpaid.html"
+http_get / "$board_unpaid" >/dev/null || true
+! html_has "$board_unpaid" "$ada_name" || fail "unpaid guest appeared on the board"
+record bid PASS "\$4 → 400 min_bid; \$5 remains unranked until fixture completion"
 
-if [[ "$bid4_code" == "400" && "$bid4_err" == "min_bid" ]] \
-  && [[ "$bid5_code" == "200" && "$bid5_kind" == "open" && "$bid5_charge" == "5" && -n "$bid5_id" ]] \
-  && [[ "$bid5_url" == /checkout/complete* ]] \
-  && html_has "$board_bid5" 'data-empty-board' \
-  && ! html_has "$board_bid5" "${ADA_NAME}"; then
-  record "bid" "PASS" "POST /checkout \$4 → 400 min_bid; \$5 fixture session pending, unpaid row not listed"
-else
-  record "bid" "FAIL" "bid HTTP \$4=${bid4_code}/${bid4_err} \$5=${bid5_code} kind=${bid5_kind} charge=${bid5_charge}"
-fi
+# checkout: the explicit fixture completion claims Ada, strips tracking, and
+# renders the current rolling-window invariant in occupied state.
+complete_body="${smoke_dir}/complete.body"
+complete_headers="${smoke_dir}/complete.headers"
+complete_code="$(http_get_headers "/checkout/complete?checkoutId=${bid5_id}" "$complete_body" "$complete_headers" || true)"
+complete_location="$(header_value "$complete_headers" location || true)"
+assert_status "$complete_code" 303 "GET /checkout/complete fixture"
+[[ "$complete_location" == "/" ]] || fail "fixture completion redirected to ${complete_location:-missing}"
 
-# --- checkout: Polar fixture complete claims the row ---
-complete_body="${WORKDIR}/complete.body"
-complete_hdrs="${WORKDIR}/complete.hdrs"
-complete_code="000"
-complete_loc=""
-if [[ -n "$bid5_id" ]]; then
-  complete_code="$(http_get_headers "$BASE" "/checkout/complete?checkoutId=${bid5_id}" \
-    "$complete_body" "$complete_hdrs" || true)"
-  complete_loc="$(header_value "$complete_hdrs" "location" || true)"
-fi
-board_paid="${WORKDIR}/board-paid.html"
-board_paid_code="$(http_get "$BASE" "/" "$board_paid" || true)"
-ada_row="$(row_for_name "$board_paid" "$ADA_NAME" || true)"
-ada_rank=""
-ada_id=""
-ada_clicks=""
-if [[ -n "$ada_row" ]]; then
-  ada_rank="$(attr_from_row "$ada_row" "rank" || true)"
-  ada_id="$(attr_from_row "$ada_row" "listing-id" || true)"
-  ada_clicks="$(clicks_from_row "$ada_row" || true)"
-fi
+board_paid="${smoke_dir}/board-paid.html"
+board_paid_code="$(http_get / "$board_paid" || true)"
+assert_status "$board_paid_code" 200 "GET / after fixture payment"
+ada_row="$(row_for_name "$board_paid" "$ada_name" || true)"
+[[ -n "$ada_row" ]] || fail "paid fixture guest missing from board"
+ada_id="$(row_attr "$board_paid" "$ada_name" listing-id || true)"
+ada_rank="$(row_attr "$board_paid" "$ada_name" rank || true)"
+ada_clicks="$(row_clicks "$board_paid" "$ada_name" || true)"
+[[ "$ada_rank" == "1" && "$ada_clicks" == "0" && -n "$ada_id" ]] \
+  || fail "paid fixture guest rank=${ada_rank:-missing} clicks=${ada_clicks:-missing}"
+! html_has "$board_paid" 'utm_source' || fail "tracking query leaked into board HTML"
+html_has "$board_paid" 'data-paid-at=' || fail "paid fixture row missing paid-at marker"
+html_has "$board_paid" 'data-rolling-week=' || fail "occupied board missing rolling-week marker"
+html_has "$board_paid" 'class="week-window"' || fail "occupied board missing week-window copy"
+html_has "$board_paid" 'Paid placements remain eligible for seven days' \
+  || fail "occupied board missing current seven-day invariant"
+html_has "$board_paid" 'does not reset at Monday midnight' \
+  || fail "occupied board missing non-civil-window invariant"
+record checkout PASS "fixture completion → Ada #1 at \$5; paid-only rank and rolling window visible"
 
-if [[ "$complete_code" == "303" && "$complete_loc" == "/" ]] \
-  && [[ "$board_paid_code" == "200" ]] \
-  && [[ "$ada_rank" == "1" && "$ada_clicks" == "0" ]] \
-  && html_has "$board_paid" "${ADA_NAME}" \
-  && html_has "$board_paid" '\$5' \
-  && ! html_has "$board_paid" 'utm_source' \
-  && ! grep -Eiq 'polar\.(sh|in)|api\.polar' "$bid5_body" "$board_paid"; then
-  record "checkout" "PASS" "GET /checkout/complete fixture; Ada #1 · \$5; no Polar network"
-else
-  record "checkout" "FAIL" "fixture complete HTTP ${complete_code} loc=${complete_loc} rank=${ada_rank}"
-fi
+# rank: a second completed fixture bid at $12 outranks the $5 placement.
+twelve_body="${smoke_dir}/twelve.json"
+twelve_headers="${smoke_dir}/twelve.headers"
+twelve_payload="{\"episodeId\":\"${episode_id}\",\"name\":\"${twelve_name}\",\"siteUrl\":\"${twelve_url}\",\"oneLiner\":\"Opened at twelve.\",\"bidUsd\":12}"
+twelve_code="$(http_post_json /checkout "$twelve_payload" "$twelve_body" "$twelve_headers" || true)"
+assert_status "$twelve_code" 200 "POST /checkout \$12"
+twelve_id="$(json_field "$twelve_body" checkoutId || true)"
+[[ -n "$twelve_id" ]] || fail "\$12 fixture checkout omitted checkoutId"
+twelve_complete_body="${smoke_dir}/twelve-complete.body"
+twelve_complete_headers="${smoke_dir}/twelve-complete.headers"
+twelve_complete_code="$(http_get_headers "/checkout/complete?checkoutId=${twelve_id}" "$twelve_complete_body" "$twelve_complete_headers" || true)"
+assert_status "$twelve_complete_code" 303 "GET /checkout/complete \$12 fixture"
 
-# Second paid listing so rank and veto have a next eligible seat.
-twelve_body="${WORKDIR}/twelve.json"
-twelve_hdrs="${WORKDIR}/twelve.hdrs"
-twelve_code="$(http_post_json "$BASE" "/checkout" \
-  "{\"episodeId\":\"${EPISODE_ID}\",\"name\":\"${TWELVE_NAME}\",\"siteUrl\":\"${TWELVE_URL}\",\"oneLiner\":\"Opened at twelve.\",\"bidUsd\":12}" \
-  "$twelve_body" "$twelve_hdrs" || true)"
-twelve_checkout="$(json_field "$twelve_body" "checkoutId" || true)"
-twelve_complete="${WORKDIR}/twelve-complete.body"
-twelve_complete_hdrs="${WORKDIR}/twelve-complete.hdrs"
-if [[ -n "$twelve_checkout" ]]; then
-  http_get_headers "$BASE" "/checkout/complete?checkoutId=${twelve_checkout}" \
-    "$twelve_complete" "$twelve_complete_hdrs" >/dev/null || true
-fi
+board_ranked="${smoke_dir}/board-ranked.html"
+board_ranked_code="$(http_get / "$board_ranked" || true)"
+assert_status "$board_ranked_code" 200 "GET / ranked board"
+twelve_rank="$(row_attr "$board_ranked" "$twelve_name" rank || true)"
+ada_rank="$(row_attr "$board_ranked" "$ada_name" rank || true)"
+twelve_listing_id="$(row_attr "$board_ranked" "$twelve_name" listing-id || true)"
+[[ "$twelve_rank" == "1" && "$ada_rank" == "2" ]] \
+  || fail "rank order was ${twelve_name}=${twelve_rank:-missing}, ${ada_name}=${ada_rank:-missing}"
+[[ -n "$twelve_listing_id" ]] || fail "ranked Twelve row omitted listing id"
+record rank PASS "\$12 is #1; Ada \$5 is #2; rank follows the bid"
 
-# --- rank: $12 is #1; $5 stays listed below ---
-board_rank="${WORKDIR}/board-rank.html"
-board_rank_code="$(http_get "$BASE" "/" "$board_rank" || true)"
-ada_row2="$(row_for_name "$board_rank" "$ADA_NAME" || true)"
-twelve_row="$(row_for_name "$board_rank" "$TWELVE_NAME" || true)"
-ada_rank2=""
-twelve_rank=""
-twelve_id=""
-if [[ -n "$ada_row2" ]]; then
-  ada_rank2="$(attr_from_row "$ada_row2" "rank" || true)"
-fi
-if [[ -n "$twelve_row" ]]; then
-  twelve_rank="$(attr_from_row "$twelve_row" "rank" || true)"
-  twelve_id="$(attr_from_row "$twelve_row" "listing-id" || true)"
-fi
-if [[ "$board_rank_code" == "200" && "$twelve_code" == "200" ]] \
-  && [[ "$twelve_rank" == "1" && "$ada_rank2" == "2" ]] \
-  && html_has "$board_rank" '\$12' \
-  && html_has "$board_rank" '\$5'; then
-  record "rank" "PASS" "\$12 is #1; Ada \$5 is #2; rank is the bid"
-else
-  record "rank" "FAIL" "rank twelve=${twelve_rank} ada=${ada_rank2} checkout=${twelve_code}"
-fi
+# click: /go increments only a paid row and forwards the canonical URL without
+# the query string supplied to the redirect request.
+click_body="${smoke_dir}/click.body"
+click_headers="${smoke_dir}/click.headers"
+click_code="$(http_get_headers "/go/${ada_id}?utm_source=injected" "$click_body" "$click_headers" || true)"
+click_location="$(header_value "$click_headers" location || true)"
+assert_status "$click_code" 302 "GET /go/:listingId"
+[[ "$click_location" == "$ada_url" ]] || fail "click forwarded ${click_location:-missing}, expected ${ada_url}"
+[[ "$click_location" != *\?* && "$click_location" != *#* ]] \
+  || fail "click redirect retained query or fragment"
+board_clicked="${smoke_dir}/board-clicked.html"
+http_get / "$board_clicked" >/dev/null || true
+ada_clicks="$(row_clicks "$board_clicked" "$ada_name" || true)"
+[[ "$ada_clicks" == "1" ]] || fail "public click count was ${ada_clicks:-missing}, expected 1"
+record click PASS "302 to stripped site URL; Ada clicks 0→1"
 
-# --- click: public /go increment, stripped URL, no query forwarded ---
-if [[ -z "$ada_id" ]]; then
-  record "click" "FAIL" "no paid listing id to click"
-else
-  click_body="${WORKDIR}/click.body"
-  click_hdrs="${WORKDIR}/click.hdrs"
-  click_code="$(http_get_headers "$BASE" "/go/${ada_id}?utm_source=injected" \
-    "$click_body" "$click_hdrs" || true)"
-  click_loc="$(header_value "$click_hdrs" "location" || true)"
-  board_click="${WORKDIR}/board-click.html"
-  http_get "$BASE" "/" "$board_click" >/dev/null || true
-  ada_after="$(row_for_name "$board_click" "$ADA_NAME" || true)"
-  after_clicks=""
-  if [[ -n "$ada_after" ]]; then
-    after_clicks="$(clicks_from_row "$ada_after" || true)"
-  fi
-  if [[ "$click_code" == "302" && "$click_loc" == "$ADA_URL" ]] \
-    && [[ "$after_clicks" == "1" ]] \
-    && [[ "$click_loc" != *\?* ]] \
-    && [[ "$click_loc" != *#* ]]; then
-    record "click" "PASS" "GET /go/${ada_id} 302 → stripped URL; clicks 0→1"
-  else
-    record "click" "FAIL" "GET /go/${ada_id} HTTP ${click_code} loc=${click_loc} clicks=${after_clicks}"
-  fi
-fi
-
-# --- veto: guest-seat host veto of #1; next eligible books; row stays visible ---
-if [[ -z "$twelve_id" ]]; then
-  record "veto" "FAIL" "no #1 listing id to veto"
-else
-  veto_body="${WORKDIR}/veto.json"
-  veto_hdrs="${WORKDIR}/veto.hdrs"
-  veto_code="$(http_post_json "$BASE" "/host/veto" \
-    "{\"episodeId\":\"${EPISODE_ID}\",\"listingId\":\"${twelve_id}\",\"reason\":\"hard sell\"}" \
-    "$veto_body" "$veto_hdrs" \
-    -H "authorization: Bearer ${HOST_SECRET}" || true)"
-  veto_ok="$(json_field "$veto_body" "ok" || true)"
-  board_veto="${WORKDIR}/board-veto.html"
-  board_veto_code="$(http_get "$BASE" "/" "$board_veto" || true)"
-  twelve_after="$(row_for_name "$board_veto" "$TWELVE_NAME" || true)"
-  ada_after_veto="$(row_for_name "$board_veto" "$ADA_NAME" || true)"
-  twelve_vetoed=""
-  twelve_rank_after=""
-  ada_rank_after=""
-  if [[ -n "$twelve_after" ]]; then
-    twelve_vetoed="$(attr_from_row "$twelve_after" "vetoed" || true)"
-    twelve_rank_after="$(attr_from_row "$twelve_after" "rank" || true)"
-  fi
-  if [[ -n "$ada_after_veto" ]]; then
-    ada_rank_after="$(attr_from_row "$ada_after_veto" "rank" || true)"
-  fi
-  if [[ "$veto_code" == "200" && "$veto_ok" == "true" ]] \
-    && [[ "$board_veto_code" == "200" ]] \
-    && [[ "$twelve_vetoed" == "true" && -z "$twelve_rank_after" ]] \
-    && [[ "$ada_rank_after" == "1" ]] \
-    && html_has "$board_veto" 'Vetoed: hard sell' \
-    && html_has "$board_veto" "${TWELVE_NAME}"; then
-    record "veto" "PASS" "POST /host/veto #1 on guest seat; Ada books #1; Twelve stays visible"
-  else
-    record "veto" "FAIL" "veto HTTP ${veto_code} vetoed=${twelve_vetoed} ada=${ada_rank_after}"
-  fi
-fi
-
-# --- live Polar path: missing secret is BLOCKED-SECRET, never a fixture success ---
-echo "== polar live =="
-if [[ "${OP_POLAR_LIVE}" == "1" ]]; then
-  missing=""
-  if [[ -z "${OP_POLAR_ACCESS_TOKEN}" ]]; then
-    missing="POLAR_ACCESS_TOKEN"
-  fi
-  if [[ -n "$missing" ]]; then
-    echo "BLOCKED-SECRET: ${missing}"
-    record "live-checkout" "BLOCKED-SECRET" "${missing}"
-  else
-    live_port="$(pick_port)"
-    live_db="${WORKDIR}/polar-live.sqlite"
-    live_log="${WORKDIR}/polar-live.log"
-    live_base="http://127.0.0.1:${live_port}"
-    live_episode="ep_live_${STAMP}"
-    seed_guest_seat "$live_db" "$live_episode" >/dev/null
-    (
-      cd "$root"
-      unset POLAR_FIXTURE_ONLY || true
-      export POLAR_LIVE=1
-      export POLAR_ACCESS_TOKEN="${OP_POLAR_ACCESS_TOKEN}"
-      export POLAR_WEBHOOK_SECRET="${OP_POLAR_WEBHOOK_SECRET:-}"
-      if [[ -n "${OP_POLAR_API_BASE}" ]]; then
-        export POLAR_API_BASE="${OP_POLAR_API_BASE}"
-      else
-        unset POLAR_API_BASE || true
-      fi
-      if [[ -n "${OP_POLAR_PRODUCT_ID}" ]]; then
-        export POLAR_PRODUCT_ID="${OP_POLAR_PRODUCT_ID}"
-      else
-        unset POLAR_PRODUCT_ID || true
-      fi
-      export PORT="${live_port}"
-      export DATABASE_PATH="${live_db}"
-      export HOST_SESSION_SECRET="${HOST_SECRET}"
-      exec node --import tsx src/server.ts
-    ) >"${live_log}" 2>&1 &
-    LIVE_PID=$!
-    if ! wait_health "$live_base"; then
-      if grep -q 'BLOCKED-SECRET: POLAR_ACCESS_TOKEN' "${live_log}"; then
-        echo "BLOCKED-SECRET: POLAR_ACCESS_TOKEN"
-        record "live-checkout" "BLOCKED-SECRET" "POLAR_ACCESS_TOKEN"
-      elif grep -q 'BLOCKED-SECRET: POLAR_WEBHOOK_SECRET' "${live_log}"; then
-        echo "BLOCKED-SECRET: POLAR_WEBHOOK_SECRET"
-        record "live-checkout" "BLOCKED-SECRET" "POLAR_WEBHOOK_SECRET"
-      else
-        record "live-checkout" "FAIL" "live Polar process did not become healthy"
-      fi
-    else
-      live_body="${WORKDIR}/live-checkout.json"
-      live_hdrs="${WORKDIR}/live-checkout.hdrs"
-      live_code="$(http_post_json "$live_base" "/checkout" \
-        "{\"episodeId\":\"${live_episode}\",\"name\":\"Live Guest ${STAMP}\",\"siteUrl\":\"https://live-${STAMP}.example/\",\"oneLiner\":\"Must not rank until Polar pays.\",\"bidUsd\":5}" \
-        "$live_body" "$live_hdrs" || true)"
-      live_url="$(json_field "$live_body" "url" || true)"
-      live_err="$(json_field "$live_body" "error" || true)"
-      live_board="${WORKDIR}/live-board.html"
-      http_get "$live_base" "/" "$live_board" >/dev/null || true
-      if html_has "$live_board" "Live Guest ${STAMP}"; then
-        record "live-checkout" "FAIL" "unpaid live Polar session appeared on the board"
-      elif [[ "$live_url" == https://sandbox.polar.sh/* ]]; then
-        record "live-checkout" "PASS" "live Polar sandbox Checkout URL; unpaid session not listed"
-      elif [[ "$live_code" == "503" && "$live_err" == "polar_unavailable" ]]; then
-        record "live-checkout" "PASS-ERROR" "POLAR_LIVE=1 token present; checkout failed closed (HTTP 503)"
-      else
-        record "live-checkout" "PASS-ERROR" "POLAR_LIVE=1 token present; HTTP ${live_code} not a sandbox.polar.sh Checkout URL"
-      fi
-    fi
-    if [[ -n "${LIVE_PID}" ]] && kill -0 "${LIVE_PID}" 2>/dev/null; then
-      kill "${LIVE_PID}" 2>/dev/null || true
-      wait "${LIVE_PID}" 2>/dev/null || true
-    fi
-    LIVE_PID=""
-  fi
-else
-  if [[ -z "${OP_POLAR_ACCESS_TOKEN}" ]]; then
-    echo "BLOCKED-SECRET: POLAR_ACCESS_TOKEN"
-    record "live-checkout" "BLOCKED-SECRET" "POLAR_ACCESS_TOKEN"
-  elif [[ -z "${OP_POLAR_WEBHOOK_SECRET}" ]]; then
-    echo "BLOCKED-SECRET: POLAR_WEBHOOK_SECRET"
-    record "live-checkout" "BLOCKED-SECRET" "POLAR_WEBHOOK_SECRET"
-  else
-    record "live-checkout" "PASS-ERROR" "POLAR_LIVE unset; secrets present but live Polar not invoked"
-  fi
-fi
+# veto: host review is on by default for guest seat. Vetoed #1 stays visible,
+# loses its rank, and the next eligible paid listing becomes #1.
+veto_body="${smoke_dir}/veto.json"
+veto_headers="${smoke_dir}/veto.headers"
+veto_payload="{\"episodeId\":\"${episode_id}\",\"listingId\":\"${twelve_listing_id}\",\"reason\":\"hard sell\"}"
+veto_code="$(http_post_json /host/veto "$veto_payload" "$veto_body" "$veto_headers" -H "authorization: Bearer ${host_secret}" || true)"
+veto_ok="$(json_field "$veto_body" ok || true)"
+assert_status "$veto_code" 200 "POST /host/veto"
+[[ "$veto_ok" == "true" ]] || fail "host veto did not return ok=true"
+board_vetoed="${smoke_dir}/board-vetoed.html"
+board_vetoed_code="$(http_get / "$board_vetoed" || true)"
+assert_status "$board_vetoed_code" 200 "GET / after host veto"
+twelve_vetoed="$(row_attr "$board_vetoed" "$twelve_name" vetoed || true)"
+twelve_rank_after="$(row_attr "$board_vetoed" "$twelve_name" rank || true)"
+ada_rank_after="$(row_attr "$board_vetoed" "$ada_name" rank || true)"
+[[ "$twelve_vetoed" == "true" && -z "$twelve_rank_after" && "$ada_rank_after" == "1" ]] \
+  || fail "veto result vetoed=${twelve_vetoed:-missing} Twelve-rank=${twelve_rank_after:-empty} Ada-rank=${ada_rank_after:-missing}"
+html_has "$board_vetoed" 'Vetoed: hard sell' || fail "veto reason was not public"
+record veto PASS "#1 vetoed; Ada books #1; vetoed Twelve remains visible"
 
 echo
-echo "== summary =="
-echo "PASS=${PASS} PASS-ERROR=${PASS_ERROR} BLOCKED-SECRET=${BLOCKED} FAIL=${FAIL}"
-echo "base=${BASE}"
-if [[ -f "${RESULT_LOG}" ]]; then
-  echo "----"
-  while IFS=$'\t' read -r flow status note; do
-    printf '%-16s %-16s %s\n' "$flow" "$status" "$note"
-  done <"${RESULT_LOG}"
-fi
-
-if [[ "$FAIL" -gt 0 ]]; then
-  exit 1
-fi
-exit 0
+echo "SUMMARY PASS=${pass_count} PASS-ERROR=${pass_error_count} FAIL=${fail_count}"
+[[ "$fail_count" -eq 0 ]] || exit 1
+echo "PASS: fixture checkout → rank → public click → guest-seat veto (zero provider calls)"

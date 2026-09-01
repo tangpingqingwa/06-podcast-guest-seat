@@ -4,7 +4,7 @@
 **This file** wins on stack, module boundaries, test layout, and the PR sequence.  
 **Git:** [CONTRIBUTING.md](./CONTRIBUTING.md). Every `### PR N` row is one squash-merged PR. `main` stays green.
 
-Pay-to-rank board. Rank is the bid. Polar + fixture. Host veto is a flag, default on for guest seat.
+Pay-to-rank board. Rank is the bid. Waffo + fixture. Host veto is a flag, default on for guest seat.
 
 ---
 
@@ -17,12 +17,12 @@ Pay-to-rank board. Rank is the bid. Polar + fixture. Host veto is a flag, defaul
 | HTTP | Fastify 5 | One process, schema validation |
 | Validation | Zod | Fail closed on bid / URL / veto |
 | Persistence | SQLite via `better-sqlite3` | One file, backup = copy |
-| Billing | `PolarPort` — fixture default; live Polar when `POLAR_LIVE=1` | Merchant of record; no Stripe in v1 |
+| Billing | `WaffoPort` — explicit `fixture`, `waffo-test`, or `waffo-prod` mode | Merchant of record; no Stripe in v1 |
 | Tests | `node:test` + `tsx` | No Jest tax |
 | Lint | `tsc --noEmit` in `scripts/test.sh` once `src/` exists | |
 | Host | One VPS, Caddy TLS | No AWS required |
 
-**Out of stack:** Prisma, Nest, Redis, Kubernetes, Vercel, Supabase, chat, NSFW allow-lists, live Polar in CI.
+**Out of stack:** Prisma, Nest, Redis, Kubernetes, Vercel, Supabase, chat, NSFW allow-lists, live Waffo in CI.
 
 ---
 
@@ -39,12 +39,12 @@ Browser
         ├─ rank.ts          bidUsd desc, firstBidAt asc on ties
         ├─ hygiene.ts       strip tracking, reject chat/NSFW
         ├─ veto.ts          flag + public reason
-        └─ PolarPort        fixture | live
+        └─ WaffoPort        fixture | waffo-test | waffo-prod
                  │
               SQLite
 ```
 
-HTTP does not talk to Polar except through `PolarPort`. Tests inject the fixture.
+HTTP does not talk to Waffo except through `WaffoPort`. Tests inject the fixture.
 
 ---
 
@@ -68,24 +68,63 @@ Min first bid: **$5**.
 
 ---
 
-## 4. PolarPort
+## 4. WaffoPort
 
 ```ts
-type PolarPort = {
+type WaffoPort = {
+  mode: "fixture" | "waffo-test" | "waffo-prod"
+  storeId: string
+  productId: string
   createCheckout(input: {
+    intentId: string
+    intentFingerprint: string
     episodeId: string
     listingId: string
-    amountUsd: number
+    chargeCents: number
+    quoteBaseCents: number
+    targetBidCents: number
     kind: "open" | "raise"
-  }): Promise<{ checkoutId: string; url: string }>
-  // webhook / fixture complete → { paid: true, amountUsd }
+    name: string
+    siteUrl: string
+    oneLiner: string
+  }): Promise<{
+    checkoutId: string
+    url: string
+    expiresAt?: string
+  }>
+  // Fixture only. Live ports reject browser/return completion.
+  completeCheckout(checkoutId: string): Promise<{ paid: true; amountCents: number }>
+  // Verify the exact raw body; settlement consumes only order.completed.
+  verifyWebhook(rawBody: string, signature?: string): WaffoWebhook
 }
 ```
 
-- Fixture: in-process complete; deterministic ids; no network.
-- Live: Polar Checkout + webhook. Missing secret → fail closed.
-- `POLAR_FIXTURE_ONLY=1` always selects fixture.
-- `scripts/test.sh` unsets live Polar env and does not call Polar hosts.
+- The application writes an immutable intent before provider I/O. It stores the
+  normalized episode/listing fields, board window, target bid, quote base,
+  exact charge, expected mode/store/product/USD/tax category, and a SHA-256
+  fingerprint. The official anonymous checkout uses the configured product,
+  `currency: "USD"`, decimal `priceSnapshot.amount`,
+  `taxCategory: "digital_goods"`, the public success URL with `?intent=`, the
+  intent as `orderMerchantExternalId`, and all normalized metadata as strings.
+- Fixture is explicit, local, and network-free. `waffo-test` and `waffo-prod`
+  require their mode-scoped credentials, IDs, webhook key, public HTTPS
+  origin, and durable SQLite path; missing or conflicting configuration fails
+  closed. Polar variables/adapters are inert compatibility debris.
+- A successful provider response attaches its exact hosted Waffo checkout URL,
+  session id, and expiry to the existing intent. Timeout, connection reset,
+  408/409/425/429, 5xx, invalid JSON, or a crash after provider acceptance
+  leave the intent `unknown` and recoverable; they never create a free rank.
+- Live settlement is webhook-only. The route verifies the raw signed body and
+  accepts only `order.completed` whose mode/store/order/payment/status/USD,
+  external intent id, exact metadata, product, decimal subtotal/tax/total, and
+  bounded provider timestamp match the immutable intent. One SQLite
+  transaction records delivery/business/payment/order identities, the outcome,
+  intent state, checkout event, and listing/raise. Exact retries are 2xx
+  no-ops; changed replays, unknown/mismatched captures, stale raises, and
+  unsafe events are durably rejected or reconciled without ranking.
+- A browser return only reads the durable intent state (`open`, `unknown`,
+  `paid`, `rejected`, or `needs_reconciliation`). It never settles live Waffo.
+  Ranks contain paid rows only, and a raise charges only the difference.
 
 ---
 
@@ -94,13 +133,17 @@ type PolarPort = {
 | Name | Required | Default |
 |---|---|---|
 | `PORT` | no | 3000 |
-| `DATABASE_PATH` | yes in prod | `./data/guest-seat.sqlite` |
-| `POLAR_FIXTURE_ONLY` | no | `1` in CI / `scripts/test.sh` |
-| `POLAR_LIVE` | no | `0`. Ignored when fixture-only is `1` |
-| `POLAR_ACCESS_TOKEN` | live only | unset |
-| `POLAR_WEBHOOK_SECRET` | live only | unset |
-| `POLAR_API_BASE` | live only | production Polar API. Operator sandbox smoke may override. |
-| `POLAR_PRODUCT_ID` | live only | unset. Sandbox custom-amount checkout needs it. |
+| `DATABASE_PATH` | yes in prod and live modes | durable SQLite path |
+| `WAFFO_MODE` | yes | `fixture`, `waffo-test`, or `waffo-prod` |
+| `WAFFO_MERCHANT_ID` | Waffo modes | unset |
+| `WAFFO_PRIVATE_KEY` or `WAFFO_PRIVATE_KEY_FILE` | Waffo modes | unset |
+| `WAFFO_STORE_ID` | Waffo modes | unset |
+| `WAFFO_PRODUCT_ID` | Waffo modes | unset |
+| `WAFFO_PUBLIC_BASE_URL` | Waffo modes | public HTTPS origin |
+| `WAFFO_API_BASE` | optional test override | official `https://api.waffo.ai` |
+| `WAFFO_TEST_WEBHOOK_PUBLIC_KEY` | `waffo-test` | unset |
+| `WAFFO_PROD_WEBHOOK_PUBLIC_KEY` | `waffo-prod` | unset |
+| `WAFFO_CHECKOUT_TIMEOUT_MS` | no | 15000 |
 | `HOST_SESSION_SECRET` | host veto/lock | dev dummy only in fixture tests |
 
 `.env` is gitignored. Never read in unit tests.
@@ -115,12 +158,12 @@ type PolarPort = {
 | `hygiene.test.ts` | UTM stripped; Discord/Telegram rejected; NSFW rejected; `/go` has no query |
 | `veto.test.ts` | guest_seat default on; sixty_second_open default off; veto drops #1; flag off → reject veto |
 | `episode.test.ts` | new episode empty; old bids do not carry |
-| `polar.test.ts` | fixture checkout claims rank; `POLAR_FIXTURE_ONLY` wins; no live host |
+| `waffo.test.ts` | explicit fixture mode, immutable intent/decimal checkout params, signed webhook settlement, exact replay/reconciliation, return non-settlement, and stale-raise safety; no live host |
 | `pages.test.ts` | `/` board; `/about`; `/rules`; public clicks; occupied live rolling last-7-days window |
 | `window.test.ts` | rolling last 7 days is 7×24h; Monday 00:00 UTC does not drop an in-window bid |
 | `scripts/test.sh` | contract checks **plus** `tsc` + `node:test` once `package.json` exists |
 
-Live Polar is **not** in CI. Optional `scripts/live-smoke.sh` is operator-only.
+Live Waffo is **not** in CI. `scripts/live-smoke.sh` is an offline fixture-only operator check.
 
 ---
 
@@ -156,12 +199,12 @@ Each PR is independently mergeable. Dependencies are hard.
 - **Dependencies:** PR 2
 - **Acceptance:** SPEC 7–9, 15; Rules page states min $5, older wins, veto default on for guest seat.
 
-### PR 5: Polar checkout + fixture
+### PR 5: Waffo checkout + fixture
 
-- **Description:** `PolarPort` fixture completes a bid or raise. Public row only after payment. Live Polar module may exist but must stay env-gated and unused in CI.
-- **Files:** `src/polar/port.ts`, `src/polar/fixture.ts`, `src/polar/live.ts`, `src/http/routes/checkout.ts`, `tests/polar.test.ts`
+- **Description:** Persist an immutable intent before the official Waffo checkout. Fixture completion is local; live `waffo-test`/`waffo-prod` settlement is raw-body signed-webhook only, with exact decimal money, replay idempotency, and durable unknown/reconciliation states.
+- **Files:** `src/waffo/port.ts`, `src/waffo/fixture.ts`, `src/waffo/live.ts`, `src/http/routes/checkout.ts`, `tests/waffo.test.ts`
 - **Dependencies:** PR 3, PR 4
-- **Acceptance:** SPEC 16–17. `POLAR_FIXTURE_ONLY=1` wins. CI / `scripts/test.sh` never set `POLAR_LIVE=1`.
+- **Acceptance:** SPEC 16–17. `WAFFO_MODE=fixture` is explicit; live modes fail closed without scoped config. Unpaid/unknown intents never rank, returns never settle live, exact signed retries are no-ops, changed/mismatched/stale events reconcile or reject, and CI/`scripts/test.sh` never calls Waffo.
 
 ### PR 6: Host veto + lock
 
@@ -172,17 +215,17 @@ Each PR is independently mergeable. Dependencies are hard.
 
 ### PR 7: Dockerfile + one-VPS runbook
 
-- **Description:** One-box image. Polar stays off until the operator sets live flags.
+- **Description:** One-box image. Waffo stays off until the operator provides explicit live mode and secrets.
 - **Files:** `Dockerfile`, `.env.example`, `deploy/runbook.md`, `scripts/test.sh`
 - **Dependencies:** PR 6
-- **Acceptance:** Node 22, non-root, `$PORT`. Image and CI do not set `POLAR_LIVE=1`.
+- **Acceptance:** Node 22, non-root, `$PORT`. Image and CI do not enable a live Waffo mode.
 
 ### PR 8: live-smoke
 
-- **Description:** Operator script starts a local process, walks list → bid → rank → Polar fixture or live checkout → public click → guest-seat veto. Missing Polar secret on the live path is `BLOCKED-SECRET` with the exact env var. Not called from `scripts/test.sh` or Actions.
+- **Description:** Operator script starts a local process, walks fixture checkout → rank → public click → guest-seat veto. A requested live Waffo mode exits without a provider call. Not called from `scripts/test.sh` or Actions.
 - **Files:** `scripts/live-smoke.sh`, `docs/live-smoke.md`
 - **Dependencies:** PR 7
-- **Acceptance:** Offline `scripts/test.sh` still green. CI does not invoke `live-smoke.sh` or set `POLAR_LIVE`. Recorded table in `docs/live-smoke.md`: list, bid, rank, checkout, click, veto.
+- **Acceptance:** Offline `scripts/test.sh` still green. CI does not invoke `live-smoke.sh` or set a live Waffo mode. Recorded table in `docs/live-smoke.md`: checkout, rank, click, veto.
 
 ---
 

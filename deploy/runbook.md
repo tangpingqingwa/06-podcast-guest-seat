@@ -1,27 +1,46 @@
-# Podcast Guest Seat — one-VPS runbook
+# Podcast Guest Seat — one-VPS Waffo runbook
 
-Single Docker host. SQLite on a volume. Caddy (or nginx) terminates TLS.
+Single Docker host. SQLite lives on a durable volume. Caddy (or nginx)
+terminates HTTPS before forwarding to the Node process.
 
-This is the global English [outbid.lol](https://outbid.lol/) guest-seat vertical: bid whole USD for the next episode’s guest seat or a 60-second open. Rank is the bid. Host veto defaults **on** for `guest_seat`. Polar stays on the in-process fixture until the operator sets live flags.
+Waffo Pancake is the sole production merchant of record for the podcast guest seat.
+The service has three
+explicit provider modes; it never infers a live mode from missing variables:
 
-## Env
+| Mode | Use | Network / persistence |
+|---|---|---|
+| `fixture` | local development, tests, and CI | no provider calls; disposable or local SQLite |
+| `waffo-test` | authorized provider test environment | Waffo test API/webhook keys and an isolated durable SQLite file |
+| `waffo-prod` | production payments | Waffo production key, HTTPS callback, registered webhook, and durable SQLite |
 
-Copy [`.env.example`](../.env.example) to `/etc/guest-seat.env` (mode `600`). Set:
+## Environment
 
-| Variable | Production |
+Copy [`.env.example`](../.env.example) to `/etc/guest-seat.env` (mode `600`).
+Set only the mode and environment appropriate for the deployment:
+
+| Variable | Required value |
 |---|---|
-| `NODE_ENV` | `production` |
-| `PORT` | listen port (default `3000`) |
-| `DATABASE_PATH` | required; must sit on the volume, e.g. `/app/data/guest-seat.sqlite` |
-| `HOST_SESSION_SECRET` | required for host veto / lock |
-| `POLAR_LIVE` | leave unset (or `0`) until soak. `1` selects live Polar |
-| `POLAR_FIXTURE_ONLY` | leave unset on the VPS. `1` wins over `POLAR_LIVE` (CI / `scripts/test.sh`) |
-| `POLAR_ACCESS_TOKEN` | live Polar only; missing secret fails closed |
-| `POLAR_WEBHOOK_SECRET` | live webhook HMAC; missing secret fails closed |
-| `POLAR_API_BASE` | optional. Default is production Polar. Sandbox smoke uses `https://sandbox-api.polar.sh` |
-| `POLAR_PRODUCT_ID` | optional Polar product for custom USD checkout |
+| `NODE_ENV` | `production` on the VPS |
+| `PORT` | listen port, normally `3000` |
+| `LISTEN_HOST` | `127.0.0.1` for a direct host/systemd process; the Docker command below explicitly sets the container to `0.0.0.0` |
+| `DATABASE_PATH` | durable volume path, e.g. `/app/data/guest-seat.sqlite`; never `:memory:` for test/prod |
+| `HOST_SESSION_SECRET` | non-empty deployment secret for host open/veto/lock; startup fails closed when absent |
+| `WAFFO_MODE` | exactly `waffo-test` or `waffo-prod` on a live process |
+| `WAFFO_MERCHANT_ID` | Waffo merchant identifier from deployment secret storage |
+| `WAFFO_PRIVATE_KEY` or `WAFFO_PRIVATE_KEY_FILE` | Waffo signing key; prefer the mounted file |
+| `WAFFO_STORE_ID` | store matching the selected Waffo environment |
+| `WAFFO_PRODUCT_ID` | active one-time Rank product matching the selected environment |
+| `WAFFO_PUBLIC_BASE_URL` | public, non-private HTTPS origin with no query or fragment |
+| `WAFFO_API_BASE` | official `https://api.waffo.ai` API origin; production rejects overrides |
+| `WAFFO_CHECKOUT_TIMEOUT_MS` | optional bounded provider deadline; default `15000` |
+| `WAFFO_TEST_WEBHOOK_PUBLIC_KEY` | required for `waffo-test` signature verification |
+| `WAFFO_PROD_WEBHOOK_PUBLIC_KEY` | required for `waffo-prod` signature verification |
 
-Do not bake secrets into the image. Do not commit `.env`. A bind-mount over `/app/data` must be writable by uid `1000` (`node`). Image and CI do not set `POLAR_LIVE`.
+Do not bake secrets into the image or commit `/etc/guest-seat.env`. Startup
+fails closed when mode, credentials, expected store/product, webhook key,
+public HTTPS URL, host session secret, or durable database configuration is
+absent or inconsistent.
+The image and CI must not select a live mode or contain provider secrets.
 
 ## Build and run
 
@@ -29,14 +48,15 @@ Do not bake secrets into the image. Do not commit `.env`. A bind-mount over `/ap
 docker build -t guest-seat:local .
 docker run -d --name guest-seat --restart unless-stopped --init \
   --env-file /etc/guest-seat.env \
+  -e LISTEN_HOST=0.0.0.0 \
   -p 127.0.0.1:3000:3000 \
   -v guest-seat-data:/app/data \
   guest-seat:local
 ```
 
-The process listens on `0.0.0.0:$PORT` as the non-root `node` user (uid 1000). Keep the published port on loopback and terminate TLS on Caddy.
-
-Example Caddy site:
+The container process listens on `0.0.0.0:$PORT` as the non-root `node` user so
+Docker bridge port publishing can reach it. The host-published port remains
+`127.0.0.1` and Caddy is the only HTTPS edge:
 
 ```
 guest.example.com {
@@ -44,26 +64,68 @@ guest.example.com {
 }
 ```
 
-## Health
+For a direct host/systemd launch (outside Docker), force the real host
+loopback boundary with `Environment=LISTEN_HOST=127.0.0.1` in the service unit.
+The server accepts only `127.0.0.1` and `0.0.0.0`; do not expose a host process
+on a non-loopback address. The Docker command's explicit `-e` override is what
+allows the container-only bind without relaxing that host/systemd rule.
 
-`GET /healthz` → `200 {"ok":true}`. No auth.
+## Health and routes
+
+After startup validation succeeds, `GET /healthz` returns `200 {"ok":true}`.
+Missing or empty `HOST_SESSION_SECRET` prevents a production-like process from
+starting, so it cannot claim healthy while host lifecycle controls are
+unconfigured. Check it after every restart:
 
 ```bash
 curl -fsS "http://127.0.0.1:${PORT:-3000}/healthz"
 ```
 
-Public board (English UI): `/`, `/about`, `/rules`. Clicks: `GET /go/:listingId`. With no episode open, `/` shows a host desk (`POST /host/open`) so the first-time host can unlock Polar. Host veto is on by default for a guest-seat episode.
+The public board is `/`, `/about`, `/rules`, and `/go/:listingId`. Checkout
+creation is `POST /checkout`. Only a verified Waffo `order.completed` received
+at `POST /webhooks/waffo` can settle a live listing. The browser return URL
+never settles a live payment.
 
-## Enable live Polar
+## Waffo test and production setup
 
-1. Confirm `/healthz` is green with live off (fixture Polar). Checkout claims rank without calling Polar hosts.
-2. Set `POLAR_LIVE=1`, `POLAR_ACCESS_TOKEN`, and `POLAR_WEBHOOK_SECRET`. Leave `POLAR_FIXTURE_ONLY` unset.
-3. Recreate the container. Missing secrets fail closed (`BLOCKED-SECRET`). `POLAR_FIXTURE_ONLY=1` keeps the fixture even if live is set.
-4. Point Polar at `POST /webhooks/polar`. Abandoned checkout does not list.
-5. Leave live flags unset in CI. `scripts/test.sh` sets `POLAR_FIXTURE_ONLY=1` and unsets `POLAR_LIVE`.
+1. Run `WAFFO_MODE=fixture` locally or in CI. The fixture must complete a
+   checkout without network calls; `scripts/live-smoke.sh` is an offline smoke.
+2. For `waffo-test`, provision test-only credentials, product/store IDs, the
+   test webhook public key, an isolated durable database, and an HTTPS test
+   origin. Confirm startup refuses missing configuration before any checkout
+   call.
+3. For `waffo-prod`, provision the managed production private key through the
+   deployment secret store, set the production IDs and public key, and confirm
+   the HTTPS origin is stable. Do not put private keys in this runbook.
+4. After the HTTPS endpoint is deployed, register the Waffo webhook at
+   `POST https://<public-host>/webhooks/waffo` in the matching Waffo
+   environment. Configure the provider to send the raw signed event and keep
+   the signing public key in the corresponding `WAFFO_*_WEBHOOK_PUBLIC_KEY`
+   secret. Webhook registration is an authorized external operation; this
+   repository does not perform it.
+5. Send only an authorized signed test event after registration. The service
+   accepts exact `order.completed` fields, persists the delivery/business
+   identities and payload hash, and ranks only after an atomic database commit.
 
-Roll back: unset `POLAR_LIVE` (or set `POLAR_FIXTURE_ONLY=1`) and recreate. Do not run live Polar from CI.
+## Failure, rollback, and reconciliation
 
-## Data
+An API timeout, connection reset, 5xx, invalid response, or crash after a
+checkout request is an ambiguous `unknown` intent. It is retained, never
+released into a free rank, and can be recovered by its matching signed event.
+Invalid signatures, mismatched mode/store/order/payment/currency/amount, and
+changed replays are rejected without ranking.
 
-Back up the SQLite file on the volume (copy is enough). Prior episode bids do not carry when a new episode opens.
+If a captured payment cannot safely mutate the current board, the intent is
+marked `needs_reconciliation`; it must not be retried as a new bid or converted
+to a stale raise. Preserve the SQLite file and provider identifiers while an
+operator reconciles it.
+
+For rollback, stop the current container, retain a verified copy of the SQLite
+volume, and start the last known-compatible image with the same durable path.
+Do not downgrade across a migration, reset the database, or switch a
+production process to fixture mode. Re-run the health check and the signed
+webhook smoke only after the rollback is authorized. Keep CI and local tests in
+`fixture` mode throughout.
+
+Back up the SQLite file on the volume before schema changes. Prior episode bids
+do not carry when a new episode opens.

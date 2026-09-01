@@ -5,7 +5,7 @@
 **Repo:** https://github.com/tangpingqingwa/06-podcast-guest-seat  
 **Market:** global English  
 **Currency:** USD only  
-**Forbidden:** chat/invite links, NSFW, invented social proof, live Polar in CI
+**Forbidden:** chat/invite links, NSFW, invented social proof, live Waffo in CI
 
 Pay-to-rank clone of [outbid.lol](https://outbid.lol/). Rank is the bid. The scarce slot is the next episode’s **guest seat** or **60-second open**.
 
@@ -29,7 +29,8 @@ This is not a booking marketplace, not a talent agency, and not a comments threa
 - Whole USD bids. Minimum **$5**. Raises pay only the **difference**.
 - Equal bids: the **older** bid keeps the higher rank.
 - Listing = **person or company + site + one-liner**. Per-episode cadence.
-- Polar checkout in production; fixture Polar in tests and CI.
+- Explicit Waffo checkout modes in production and tests; fixture mode is
+  offline and must be selected intentionally.
 - About + Rules pages. Public click counts. Tracking query strings stripped.
 - Host veto is a real, documented flag — default **on** for `guest_seat`.
 
@@ -45,7 +46,7 @@ This is not a booking marketplace, not a talent agency, and not a comments threa
 ### Kill / change rules
 
 - If 90 days after a public board: paid listings < 10 **and** no host is using veto or lock, freeze features.
-- If Polar is down, checkout fails closed. Do not invent a paid rank.
+- If Waffo is down, checkout fails closed. Do not invent a paid rank.
 
 ---
 
@@ -58,7 +59,7 @@ This is not a booking marketplace, not a talent agency, and not a comments threa
 
 Cadence is **per episode**, not a forever board.
 
-Occupied live `/` ranks Polar-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. Host lock still freezes the episode. Paid rows older than 7 days stay stored; they do not occupy the live rundown.
+Occupied live `/` ranks Waffo-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. Host lock still freezes the episode. Paid rows older than 7 days stay stored; they do not occupy the live rundown.
 
 1. A show opens episode `N` (guest seat or 60-second open).
 2. Bids land on that episode’s board until the host **locks** it (or the documented lock time).
@@ -83,7 +84,7 @@ Public leaderboard. No ads, no bidder API keys, no revenue share. You pay to sta
 | Raise | Same listing (same episode + same site identity) may raise. New total must be at least **$1 above the current #1**. Payer pays only the **difference**. |
 | Identity | Another bidder cannot steal a listing by paying only that difference. They pay a full new bid. |
 | Claim | A **completed payment** claims the rank. Unpaid checkout does not. |
-| Window | Occupied live rank is Polar-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. |
+| Window | Occupied live rank is Waffo-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. |
 | Tracking | Query strings are stripped from listing URLs. Affiliate / referral / UTM params do not survive. |
 | Shorteners | Not allowed as the stored URL. Resolve to the redirect target or reject. |
 | Chat / NSFW | Reject. Telegram, WhatsApp, Discord, Messenger, Signal, and similar invite hosts. Sexual / adult platforms. |
@@ -105,7 +106,7 @@ type Listing = {
   oneLiner: string        // one sentence; no markdown
   bidUsd: number          // integer, >= 5
   firstBidAt: string      // ISO; tie-break
-  paidAt: string          // ISO; completed Polar (or fixture) payment
+  paidAt: string          // ISO; completed Waffo (or fixture) payment
   clicks: number          // public
   vetoedAt: string | null
   vetoReason: string | null
@@ -142,7 +143,7 @@ Veto exists so a guest-seat auction does not become a pure hard-sell by default.
 | Default | `true` when `seatKind === "guest_seat"` |
 | Default | `false` when `seatKind === "sixty_second_open"` |
 | Override | A show may flip the flag **before the first paid bid** on that episode. After the first paid bid, the flag is frozen for that episode. |
-| Effect | Host may veto the current #1 (or any listed bidder) with a **public reason**. Money already paid is not refunded by this product (Polar / MoR policy is outside the rank engine). |
+| Effect | Host may veto the current #1 (or any listed bidder) with a **public reason**. Money already paid is not refunded by this product (Waffo / MoR policy is outside the rank engine). |
 | After veto | That listing is ineligible. Rank recomputes among remaining paid listings. Older still wins ties. |
 | When off | Highest paid bid is booked at lock. No host reject path. |
 | Transparency | Vetoed rows stay visible as vetoed. Do not silently delete a paid listing. |
@@ -160,8 +161,8 @@ GET  /about
 GET  /rules
 GET  /go/:listingId            302 to stripped siteUrl; increment public clicks
 GET  /healthz                  200 if process up
-POST /checkout                 start Polar (or fixture) checkout for a bid / raise
-POST /webhooks/polar           Polar payment completed → claim rank
+POST /checkout                 start Waffo (or fixture) checkout for a bid / raise
+POST /webhooks/waffo           Waffo payment completed → claim rank
 POST /host/open                host session; open the next empty episode
 POST /host/veto                host session; only if vetoEnabled
 POST /host/lock                lock the episode
@@ -173,14 +174,15 @@ Public clicks: `/go/:listingId` never forwards original query junk. The click co
 
 ---
 
-## 8. Payments (Polar + fixture)
+## 8. Payments (Waffo + fixture)
 
 | Mode | When | Behavior |
 |---|---|---|
-| Fixture | default, CI, `scripts/test.sh` | `PolarPort` fake. Completing a fixture checkout claims rank. No network. |
-| Live Polar | `POLAR_LIVE=1` **and** secrets present **and** `POLAR_FIXTURE_ONLY` not `1` | Polar Checkout + webhook. Fail closed if secrets missing. |
+| Fixture | explicit offline test/development mode | `WaffoPort` fake. Completing a fixture checkout claims rank. No network. |
+| Live Waffo | Explicit `WAFFO_MODE=waffo-prod` or `waffo-test`, all mode-scoped secrets/config present | Waffo Checkout + webhook. Fail closed if configuration is missing or inconsistent. |
 
-`POLAR_FIXTURE_ONLY=1` always wins. CI must not set `POLAR_LIVE=1` or Polar secrets.
+`WAFFO_MODE=fixture` is explicit and offline. CI must not select a live mode or
+provide live credentials.
 
 A listing is not ranked until payment completes. Abandoned checkout = no row (or an unpaid draft that is not public — v1: no public unpaid rows).
 
@@ -205,7 +207,7 @@ Clicks go to the cleaned URL only.
 - Board shows rank, name, one-liner, bid, relative time, public clicks, veto state.
 - Do not render “verified”, star ratings, or follower counts.
 - English UI.
-- Footer: independent board; not affiliated with listed companies or Polar beyond payments.
+- Footer: independent board; not affiliated with listed companies or Waffo beyond payments.
 - `/about`: what the seat is, per-episode cadence, veto default.
 - `/rules`: the auction table in §4 plus veto in §6, verbatim enough that a bidder can predict rank.
 
@@ -230,16 +232,17 @@ Clicks go to the cleaned URL only.
 | 13 | Veto when flag off | 403 / documented error |
 | 14 | New episode | Empty board; old bids do not carry |
 | 15 | Public click | `/go/:id` 302 + clicks increment |
-| 16 | Polar fixture | Checkout without network claims rank |
-| 17 | `POLAR_LIVE` unset in test | No live Polar host |
+| 16 | Waffo fixture | Checkout without network claims rank |
+| 17 | Live mode absent in test | No live Waffo host |
 
 ---
 
 ## 12. Infrastructure
 
 - One process, Node 22, SQLite, one VPS behind Caddy. No AWS required for v1.
-- Env: `PORT`, `DATABASE_PATH`, `POLAR_LIVE`, `POLAR_FIXTURE_ONLY`, Polar secrets, host session secret.
-- `.env` is gitignored. Never read Polar secrets in unit tests.
+- Env: `PORT`, `DATABASE_PATH`, explicit `WAFFO_MODE`, mode-scoped Waffo
+  secrets/configuration, host session secret.
+- `.env` is gitignored. Never read Waffo secrets in unit tests.
 
 ---
 
@@ -256,7 +259,7 @@ Clicks go to the cleaned URL only.
     server.ts
     rank.ts
     listings.ts
-    polar/          # PolarPort + fixture + live
+    waffo/          # WaffoPort + fixture + live
     http/
   tests/
     fixtures/
@@ -282,4 +285,4 @@ Full process: [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Implementation plan (stack, modules, PR DAG): [BUILD.md](./BUILD.md).
 
-Until there is an application binary, `scripts/test.sh` still has to pass: contract files exist, SPEC/CONTRIBUTING agree, no tracked secrets. Adding a server or CLI means **extending** that script with unit/contract tests. Live Polar calls are optional and must not be required for `main` to stay green.
+Until there is an application binary, `scripts/test.sh` still has to pass: contract files exist, SPEC/CONTRIBUTING agree, no tracked secrets. Adding a server or CLI means **extending** that script with unit/contract tests. Live Waffo calls are optional and must not be required for `main` to stay green.

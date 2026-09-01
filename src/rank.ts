@@ -49,11 +49,13 @@ export type ApplyPaidRaiseInput = {
   siteUrl: string;
   newTotalUsd: number;
   paidAt: string;
+  /** Settlement-time eligibility snapshot; defaults to the current clock. */
+  now?: Date;
   /** When set, siteUrl must match this listing’s identity. */
   listingId?: string;
 };
 
-/** Polar (or the fixture) reported paid. Empty / epoch / unpaid never ranks. */
+/** Waffo (or the fixture) reported paid. Empty / epoch / unpaid never ranks. */
 export function isPaidListing(listing: Pick<RankableListing, "paidAt">): boolean {
   const paidAt = listing.paidAt.trim();
   if (!paidAt) {
@@ -66,7 +68,7 @@ export function isPaidListing(listing: Pick<RankableListing, "paidAt">): boolean
   return ms > 0;
 }
 
-/** Polar-paid rows only. Unpaid or abandoned checkout never occupies the board. */
+/** Provider-paid rows only. Unpaid or abandoned checkout never occupies the board. */
 export function paidListings<T extends Pick<RankableListing, "paidAt">>(
   listings: readonly T[],
 ): T[] {
@@ -74,7 +76,7 @@ export function paidListings<T extends Pick<RankableListing, "paidAt">>(
 }
 
 /**
- * Polar-paid rows still inside the rolling last-7-days live window.
+ * Provider-paid rows still inside the rolling last-7-days live window.
  * Occupied `/` uses this. Locked archives keep every paid row.
  */
 export function livePaidListings<T extends Pick<RankableListing, "paidAt">>(
@@ -106,7 +108,7 @@ export function isEligible(
 /**
  * Eligible only. Order: bidUsd DESC, firstBidAt ASC, id ASC.
  * Rank is the bid — clicks and name are not keys.
- * Pass `now` to rank only Polar-paid `paidAt` still inside the rolling last 7 days.
+ * Pass `now` to rank only provider-paid `paidAt` still inside the rolling last 7 days.
  */
 export function rankListings<T extends RankableListing>(
   listings: readonly T[],
@@ -189,12 +191,23 @@ export function quoteRaise(
   };
 }
 
-function listingForIdentity(
+/**
+ * Shared quote/settlement identity resolver. Difference-only raises are
+ * allowed only for a currently live, paid, non-vetoed row on this episode.
+ */
+export function raiseableListing(
   listings: readonly Listing[],
   siteUrl: string,
+  episodeId?: string,
+  now: Date = new Date(),
 ): Listing | undefined {
   const identity = siteIdentity(siteUrl);
-  return listings.find((row) => siteIdentity(row.siteUrl) === identity);
+  return listings.find(
+    (row) =>
+      siteIdentity(row.siteUrl) === identity &&
+      isEligible(row, episodeId) &&
+      bidInRollingWeek(row.paidAt, now),
+  );
 }
 
 /**
@@ -211,7 +224,7 @@ export function applyPaidOpen(
   input: InsertListingInput,
 ): { listing: Listing; chargeUsd: number } {
   const listings = listListingsForEpisode(db, input.episodeId);
-  if (listingForIdentity(listings, input.siteUrl)) {
+  if (raiseableListing(listings, input.siteUrl, input.episodeId)) {
     throw new RankError(
       "not_a_raise",
       "same site identity must raise; other bidders pay a full new bid",
@@ -228,10 +241,11 @@ export function applyPaidRaise(
   input: ApplyPaidRaiseInput,
 ): { listing: Listing; chargeUsd: number } {
   const listings = listListingsForEpisode(db, input.episodeId);
+  const now = input.now ?? new Date();
   const byId = input.listingId
     ? listings.find((row) => row.id === input.listingId)
     : undefined;
-  const byIdentity = listingForIdentity(listings, input.siteUrl);
+  const byIdentity = raiseableListing(listings, input.siteUrl, input.episodeId, now);
 
   if (input.listingId !== undefined) {
     if (byId === undefined || byIdentity === undefined || byId.id !== byIdentity.id) {
@@ -250,7 +264,7 @@ export function applyPaidRaise(
     );
   }
 
-  const quote = quoteRaise(existing, input.newTotalUsd, listings, input.episodeId);
+  const quote = quoteRaise(existing, input.newTotalUsd, listings, input.episodeId, now);
   db.prepare("UPDATE listings SET bid_usd = ?, paid_at = ? WHERE id = ?").run(
     quote.nextUsd,
     input.paidAt,
