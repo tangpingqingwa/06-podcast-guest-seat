@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 
+const INDEXNOW_KEY = "6a8655bd0800fc2a46f3b14ad0a84a06";
 const ICON_NAMES = [
   "brand-mark.svg",
   "brand-mark.png",
@@ -46,6 +47,13 @@ const icons = new Map(
 );
 
 export function registerAssetRoutes(app: FastifyInstance): void {
+  app.get(`/${INDEXNOW_KEY}.txt`, async (_request, reply) => {
+    await reply
+      .header("Cache-Control", "public, max-age=86400")
+      .type("text/plain; charset=utf-8")
+      .send(`${INDEXNOW_KEY}\n`);
+  });
+
   app.get<{ Params: { name: string } }>("/icons/:name", async (request, reply) => {
     const icon = icons.get(request.params.name as (typeof ICON_NAMES)[number]);
     if (!icon) {
