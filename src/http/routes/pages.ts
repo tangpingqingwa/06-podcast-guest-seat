@@ -17,6 +17,14 @@ import {
 } from "../../rank.js";
 import { BOARD_CSS, STUDIO_CSS } from "../../views/skin.js";
 
+function publicCss(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+    /waffo|fixture|reference|outbid|local-only|test-only|implementation|development/i.test(comment)
+      ? ""
+      : comment,
+  );
+}
+
 export const BOARD_PATH = "/" as const;
 export const EPISODE_INDEX_PATH = "/e" as const;
 export const EPISODE_BOARD_PATH = "/e/:episodeId" as const;
@@ -294,20 +302,64 @@ function renderLayout(input: {
   css?: string;
   context?: ContextState;
   search?: readonly SearchEntry[];
+  description?: string;
+  canonicalPath?: string;
+  noIndex?: boolean;
 }): string {
+  const siteUrl = "https://podcastseat.lol";
+  const siteName = "Podcast Guest Seat";
+  const defaultDescription =
+    "Discover podcast guests competing for the featured seat on a transparent rolling seven-day studio rundown. Rank is the bid.";
+  const title = escapeHtml(input.title);
+  const description = escapeHtml(input.description ?? defaultDescription);
+  const canonicalPath = input.canonicalPath ??
+    (input.path === "/about" ? "/about" : input.path === "/rules" ? "/rules" : "/");
+  const canonical = `${siteUrl}${canonicalPath}`;
+  const noIndex = input.noIndex ?? /(checkout|payment|return|host)/i.test(input.title);
+  const robots = noIndex
+    ? "noindex,nofollow"
+    : "index,follow,max-image-preview:large,max-snippet:-1";
+  const structuredData = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteName,
+    url: siteUrl,
+    description: input.description ?? defaultDescription,
+    inLanguage: "en",
+    isAccessibleForFree: true,
+  }).replace(/</g, "\\u003c");
   const context = input.context ?? DEFAULT_CONTEXT;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(input.title)}</title>
-  <style>${input.css ?? STUDIO_CSS}</style>
+  <link rel="icon" type="image/svg+xml" href="/icons/brand-mark.svg">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="canonical" href="${canonical}">
+  <title>${title}</title>
+  <meta name="description" content="${description}">
+  <meta name="robots" content="${robots}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${siteName}">
+  <meta property="og:title" content="${title}">
+  <meta property="og:description" content="${description}">
+  <meta property="og:url" content="${canonical}">
+  <meta property="og:image" content="${siteUrl}/icons/brand-mark.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="${title}">
+  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:image" content="${siteUrl}/icons/brand-mark.png">
+  <script type="application/ld+json">${structuredData}</script>
+  <style>${publicCss(input.css ?? STUDIO_CSS)}</style>
 </head>
 <body>
   <header class="site-header" data-slot="site-header">
     <div class="header-shell" data-slot="shell">
       <a class="brand" href="/" aria-label="Guest Seat Studio Rundown" data-slot="brand">
+        <img class="brand-mark" src="/icons/brand-mark.svg" width="30" height="30" alt="" aria-hidden="true">
         <span class="brand-wordmark">Guest Seat</span>
         <span class="brand-descriptor">STUDIO RUNDOWN</span>
       </a>

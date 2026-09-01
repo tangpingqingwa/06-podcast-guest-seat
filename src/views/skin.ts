@@ -579,6 +579,7 @@ main, body > footer {
 .header-shell { width: min(calc(100% - 32px), 1160px); }
 .site-header { height: 84px; min-height: 84px; padding: 24px 0 18px; }
 .brand { gap: 10px; }
+.brand-mark { display: block; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; }
 .brand-wordmark { font-weight: 750; }
 .brand-descriptor {
   color: var(--primary-strong);

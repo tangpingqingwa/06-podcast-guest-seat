@@ -720,7 +720,8 @@ test("board shell keeps the compact responsive controls and guest-seat markers",
   assert.match(studio, /data-later-seat/);
   assert.match(studio, /data-paid-at=/);
   assert.match(studio, /data-first-click="guest"/);
-  assert.doesNotMatch(html, /class="brand-mark"|class="guest-avatar"|<svg\b|lucideIcon|⌕|☾|☼/);
+  assert.match(html, /<img class="brand-mark" src="\/icons\/brand-mark\.svg"[^>]*>/);
+  assert.doesNotMatch(html, /class="guest-avatar"|<svg\b|lucideIcon|⌕|☾|☼/);
   assert.doesNotMatch(html, /\.ranking-tab::before|\.ticket-kicker::before/);
   assert.doesNotMatch(studio, /Explore <span|class="guest-avatar"/);
   assert.match(html, /--primary: #d9785b/);
@@ -875,7 +876,7 @@ test("occupied desktop rundown derives lower ranking and activity from paid rows
   assert.match(studio, /data-lower-listing-id="lst_lower_1"[^>]*data-placement-rank="1"/);
   assert.match(studio, /data-activity-listing-id="lst_lower_5"[^>]*data-activity-paid-at="2026-08-27T05:00:05\.000Z"[^>]*data-activity-rank="5"[^>]*data-activity-clicks="5"/);
   assert.match(studio, /5 clicks/);
-  assert.doesNotMatch(studio, /class="guest-avatar"|class="brand-mark"|<svg\b|lucideIcon|⌕|☾|☼/);
+  assert.doesNotMatch(studio, /class="guest-avatar"|<svg\b|lucideIcon|⌕|☾|☼/);
   assert.match(html, /\.lower-fold \{ display: grid; gap: 54px; width: 100%; margin: 8px 0 19px; \}/);
   assert.doesNotMatch(html, /\.lower-fold \{ display: none; \}/);
 });
@@ -4679,10 +4680,8 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   );
   assert.match(occupiedCss, /\.studio\.studio-open-occupied \.claim\[data-claim-state="open-occupied"\] \.bid-field\[data-raise-amount-field\] \.raise-amount/);
 
-  const script = occupiedHtml.slice(
-    occupiedHtml.indexOf("<script>"),
-    occupiedHtml.indexOf("</script>"),
-  );
+  const scriptStart = occupiedHtml.indexOf("<script>");
+  const script = occupiedHtml.slice(scriptStart, occupiedHtml.indexOf("</script>", scriptStart));
   assert.match(script, /data-live-listings/);
   assert.match(script, /input\[name="siteUrl"\]/);
   assert.match(script, /data-new-guest-waffo-charge/);
@@ -4797,7 +4796,8 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   assert.match(liveStudio, /data-host-lock/);
   assert.doesNotMatch(liveStudio, /Waffo charges \$<span data-raise-amount-usd>1<\/span>/);
   assert.match(liveStudio, /Claim #1 for/);
-  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  const liveScriptStart = live.body.indexOf("<script>");
+  const liveScript = live.body.slice(liveScriptStart, live.body.indexOf("</script>", liveScriptStart));
   assert.match(liveScript, /input\[name="siteUrl"\]/);
   assert.match(liveScript, /data-raiser-waffo-charge/);
 
@@ -5070,10 +5070,8 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
   );
   assert.match(occupiedCss, /\.studio\.studio-open-occupied \.claim\[data-claim-state="open-occupied"\] \.claim-note\[data-occupied-raise\]/);
 
-  const script = occupiedHtml.slice(
-    occupiedHtml.indexOf("<script>"),
-    occupiedHtml.indexOf("</script>"),
-  );
+  const scriptStart = occupiedHtml.indexOf("<script>");
+  const script = occupiedHtml.slice(scriptStart, occupiedHtml.indexOf("</script>", scriptStart));
   assert.match(script, /data-live-listings/);
   assert.match(script, /input\[name="siteUrl"\]/);
   assert.match(script, /data-new-guest-claim-note/);
@@ -5191,7 +5189,8 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
   assert.match(liveStudio, /data-first-click="guest"/);
   assert.match(liveStudio, /data-host-lock/);
   assert.match(liveStudio, /Claim #1 for/);
-  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  const liveScriptStart = live.body.indexOf("<script>");
+  const liveScript = live.body.slice(liveScriptStart, live.body.indexOf("</script>", liveScriptStart));
   assert.match(liveScript, /input\[name="siteUrl"\]/);
   assert.match(liveScript, /data-raiser-claim-note/);
   assert.match(liveScript, /data-claim-note-lead/);
@@ -5483,10 +5482,8 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
     occupiedCss,
     /\.studio\.studio-open-occupied \.claim\[data-claim-state="open-occupied"\] \[data-raiser-form-hint-usd\]/,
   );
-  const script = occupiedHtml.slice(
-    occupiedHtml.indexOf("<script>"),
-    occupiedHtml.indexOf("</script>"),
-  );
+  const scriptStart = occupiedHtml.indexOf("<script>");
+  const script = occupiedHtml.slice(scriptStart, occupiedHtml.indexOf("</script>", scriptStart));
   assert.match(script, /data-live-listings/);
   assert.match(script, /input\[name="siteUrl"\]/);
   assert.match(script, /data-new-guest-form-hint/);
@@ -5613,7 +5610,8 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
   assert.match(liveStudio, /data-first-click="guest"/);
   assert.match(liveStudio, /data-host-lock/);
   assert.match(liveStudio, /Claim #1 for/);
-  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  const liveScriptStart = live.body.indexOf("<script>");
+  const liveScript = live.body.slice(liveScriptStart, live.body.indexOf("</script>", liveScriptStart));
   assert.match(liveScript, /input\[name="siteUrl"\]/);
   assert.match(liveScript, /data-raiser-form-hint/);
   assert.match(liveScript, /data-form-hint-lead/);
@@ -5887,10 +5885,8 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
     occupiedCss,
     /\.studio\.studio-open-occupied \.claim\[data-claim-state="open-occupied"\] \[data-raiser-guest\]/,
   );
-  const script = occupiedHtml.slice(
-    occupiedHtml.indexOf("<script>"),
-    occupiedHtml.indexOf("</script>"),
-  );
+  const scriptStart = occupiedHtml.indexOf("<script>");
+  const script = occupiedHtml.slice(scriptStart, occupiedHtml.indexOf("</script>", scriptStart));
   assert.match(script, /data-live-listings/);
   assert.match(script, /input\[name="siteUrl"\]/);
   assert.match(script, /data-raiser-guest/);
@@ -6015,7 +6011,8 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
   assert.match(liveStudio, /data-first-click="guest"/);
   assert.match(liveStudio, /data-host-lock/);
   assert.match(liveStudio, /Claim #1 for/);
-  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  const liveScriptStart = live.body.indexOf("<script>");
+  const liveScript = live.body.slice(liveScriptStart, live.body.indexOf("</script>", liveScriptStart));
   assert.match(liveScript, /input\[name="siteUrl"\]/);
   assert.match(liveScript, /data-raiser-guest-name/);
   assert.match(liveScript, /match\.name/);
@@ -6280,10 +6277,8 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
     occupiedCss,
     /\.studio\.studio-open-occupied \.claim\[data-claim-state="open-occupied"\] \.outbid\[data-occupied-outbid\] \[data-raiser-outbid-guest-name\]/,
   );
-  const script = occupiedHtml.slice(
-    occupiedHtml.indexOf("<script>"),
-    occupiedHtml.indexOf("</script>"),
-  );
+  const scriptStart = occupiedHtml.indexOf("<script>");
+  const script = occupiedHtml.slice(scriptStart, occupiedHtml.indexOf("</script>", scriptStart));
   assert.match(script, /data-live-listings/);
   assert.match(script, /input\[name="siteUrl"\]/);
   assert.match(script, /data-raiser-outbid-guest/);
@@ -6402,7 +6397,8 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   assert.match(liveStudio, /data-first-click="guest"/);
   assert.match(liveStudio, /data-host-lock/);
   assert.match(liveStudio, /Claim #1 for/);
-  const liveScript = live.body.slice(live.body.indexOf("<script>"), live.body.indexOf("</script>"));
+  const liveScriptStart = live.body.indexOf("<script>");
+  const liveScript = live.body.slice(liveScriptStart, live.body.indexOf("</script>", liveScriptStart));
   assert.match(liveScript, /input\[name="siteUrl"\]/);
   assert.match(liveScript, /data-raiser-outbid-guest-name/);
   assert.match(liveScript, /outbidGuestName\.textContent = guestName/);
