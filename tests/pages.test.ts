@@ -4545,6 +4545,37 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   });
   assert.equal(matchLiveListing("https://raise.example/", liveRefs), undefined);
   assert.equal(matchLiveListing("", liveRefs), undefined);
+  for (const value of [
+    "javascript:123",
+    "data:123",
+    "ftp:123",
+    "mailto:123",
+    "custom:123",
+    "javascript:foo@evil.com",
+    "javascript\n://example.com",
+    "data\t://example.com",
+    "ftp\r://example.com",
+    "http\n://example.com",
+    "javascript" + String.fromCharCode(92) + "://example.com",
+    "//" + String.fromCharCode(92) + "evil.com",
+    "//evil.com" + String.fromCharCode(92) + "path",
+    "/path",
+    "///example.com",
+    "localhost",
+    "127.0.0.1",
+    "[::]",
+    "[::1]",
+    "[fec0::1]",
+    "[ff02::1]",
+    "[::ffff:127.0.0.1]",
+  ]) {
+    assert.equal(matchLiveListing(value, liveRefs), undefined, value);
+  }
+  assert.deepEqual(matchLiveListing("//example.com/ada", liveRefs), {
+    identity: "example.com/ada",
+    bidUsd: 12,
+  });
+  assert.equal(matchLiveListing("//public-host", liveRefs), undefined);
   const adaRaise = matchLiveListing("https://example.com/ada", liveRefs);
   assert.equal(13 - (adaRaise?.bidUsd ?? 0), 1);
   const holdRaise = matchLiveListing("https://hold.example/", liveRefs);
@@ -4691,6 +4722,8 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   assert.match(script, /data-raiser-waffo-charge/);
   assert.match(script, /data-raise-lead-usd/);
   assert.match(script, /data-waffo-lead/);
+  assert.match(script, /function parseGuestSiteUrl\(raw\)/);
+  assert.match(script, /parseGuestSiteUrl\(site && site\.value\)/);
   assert.match(script, /setAttribute\("hidden"/);
   assert.match(script, /removeAttribute\("hidden"/);
   assert.match(script, /raising \? "raise" : "new"/);
@@ -6976,6 +7009,66 @@ test("HTML Outbid form posts to /checkout and fixture checkout claims the seat",
   assert.match(board.body, /ada.example\/notes/);
   assert.match(board.body, /\$5/);
   assert.match(board.body, /data-rank="1"/);
+});
+
+test("checkout rejects inferred schemes, malformed authorities, and private targets", async () => {
+  const db = memoryDb();
+  createEpisode(db, {
+    id: "ep_url_attack",
+    showId: "show_english",
+    label: "Episode URL attack",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+  const rejected = [
+    "javascript:123",
+    "data:123",
+    "ftp:123",
+    "mailto:123",
+    "custom:123",
+    "javascript:foo@evil.com",
+    "javascript\n://example.com",
+    "data\t://example.com",
+    "ftp\r://example.com",
+    "http\n://example.com",
+    "javascript" + String.fromCharCode(92) + "://example.com",
+    "//" + String.fromCharCode(92) + "evil.com",
+    "//evil.com" + String.fromCharCode(92) + "path",
+    "/path",
+    "///example.com",
+    "localhost",
+    "127.0.0.1",
+    "[::]",
+    "[::1]",
+    "[fec0::1]",
+    "[ff02::1]",
+    "[::ffff:127.0.0.1]",
+    "t.me..",
+    "onlyfans.com...",
+    "bit.ly....",
+  ];
+  for (const siteUrl of rejected) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/checkout",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      payload: JSON.stringify({
+        episodeId: "ep_url_attack",
+        name: "Bad URL",
+        siteUrl,
+        oneLiner: "Should not start.",
+        bidUsd: 5,
+      }),
+    });
+    assert.equal(response.statusCode, 400, siteUrl);
+    assert.match(response.body, /"error":"(?:invalid_url|https_required|chat_link|nsfw|url_shortener)"/, siteUrl);
+  }
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS n FROM checkout_intents").get() as { n: number }).n,
+    0,
+  );
 });
 
 test("all-vetoed live board stays truthful without an occupied claim or host lock", () => {

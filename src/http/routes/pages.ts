@@ -15,6 +15,7 @@ import {
   rankListings,
   type RankedListing,
 } from "../../rank.js";
+import { canonicalizeSiteUrl } from "../../hygiene.js";
 import { BOARD_CSS, STUDIO_CSS } from "../../views/skin.js";
 
 function publicCss(css: string): string {
@@ -172,23 +173,11 @@ function liveListingRefs(rows: readonly BoardRow[]): LiveListingRef[] {
 
 /** Host + path from a guest-typed site, including a missing https://. */
 export function siteIdentityFromGuestInput(raw: string): string | undefined {
-  const value = raw.trim();
-  if (!value) return undefined;
-  const candidates = value.startsWith("//")
-    ? [value, `https:${value}`]
-    : [value, `https://${value}`];
-  for (const candidate of candidates) {
-    try {
-      const parsed = new URL(candidate);
-      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) {
-        continue;
-      }
-      return siteIdentity(candidate);
-    } catch {
-      // try the next candidate
-    }
+  try {
+    return siteIdentity(canonicalizeSiteUrl(raw));
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
 
 /** Same episode + same site identity is a raise. Waffo bills only the difference. */
@@ -1135,6 +1124,189 @@ export function renderBoardHtml(
 ${studio}
 </div>
 <script>
+  function hasInvalidSiteChars(value) {
+    for (var i = 0; i < value.length; i++) {
+      var code = value.charCodeAt(i);
+      if (code < 32 || code === 127 || code === 92) return true;
+    }
+    return false;
+  }
+  function normalizeSiteHost(raw) {
+    var host = String(raw || "").toLowerCase();
+    if (host.charAt(0) === "[") host = host.slice(1);
+    if (host.charAt(host.length - 1) === "]") host = host.slice(0, -1);
+    while (host.charAt(host.length - 1) === ".") host = host.slice(0, -1);
+    return host;
+  }
+  function siteIdentityHost(parsed) {
+    var host = normalizeSiteHost(parsed.hostname);
+    return host.indexOf(":") >= 0 ? "[" + host + "]" : host;
+  }
+  function numericPortSuffix(value) {
+    if (value.charAt(0) !== ":" || value.length < 2) return false;
+    for (var i = 1; i < value.length; i++) {
+      var code = value.charCodeAt(i);
+      if (code < 48 || code > 57) return false;
+    }
+    return true;
+  }
+  function authoritySchemeSiteUrl(value) {
+    var schemeEnd = value.indexOf("://");
+    if (schemeEnd <= 0) return false;
+    var first = value.charCodeAt(0);
+    if (!((first >= 65 && first <= 90) || (first >= 97 && first <= 122))) return false;
+    for (var i = 1; i < schemeEnd; i++) {
+      var code = value.charCodeAt(i);
+      if (!((code >= 65 && code <= 90) || (code >= 97 && code <= 122) ||
+        (code >= 48 && code <= 57) || code === 43 || code === 45 || code === 46)) return false;
+    }
+    return true;
+  }
+  function authorityOfSite(value) {
+    var schemeEnd = authoritySchemeSiteUrl(value) ? value.indexOf("://") : -1;
+    var start = value.indexOf("//") === 0
+      ? 2
+      : schemeEnd >= 0
+        ? schemeEnd + 3
+        : 0;
+    for (var i = start; i < value.length; i++) {
+      var code = value.charCodeAt(i);
+      if (code === 47 || code === 63 || code === 35) return value.slice(start, i);
+    }
+    return value.slice(start);
+  }
+  function hostPartOfSiteAuthority(authority, allowUserinfo) {
+    if (!authority) return "";
+    if (allowUserinfo) {
+      var userinfoEnd = authority.lastIndexOf("@");
+      if (userinfoEnd >= 0) authority = authority.slice(userinfoEnd + 1);
+    } else if (authority.indexOf("@") >= 0) {
+      return "";
+    }
+    if (authority.indexOf(String.fromCharCode(92)) >= 0) return "";
+    if (authority.charAt(0) === "[") {
+      var closing = authority.indexOf("]");
+      if (closing < 0) return "";
+      var suffix = authority.slice(closing + 1);
+      if (suffix && !numericPortSuffix(suffix)) return "";
+      return authority.slice(0, closing + 1);
+    }
+    if (authority.indexOf("[") >= 0 || authority.indexOf("]") >= 0) return "";
+    var colon = authority.indexOf(":");
+    if (colon < 0) return authority;
+    if (colon !== authority.lastIndexOf(":") || !numericPortSuffix(authority.slice(colon))) return "";
+    return authority.slice(0, colon);
+  }
+  function dottedSiteHost(host) {
+    var labels = host.split(".");
+    if (labels.length < 2) return false;
+    for (var i = 0; i < labels.length; i++) {
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(labels[i])) return false;
+    }
+    return true;
+  }
+  function plausibleSingleLabelSiteHost(host) {
+    return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(host) && host.indexOf("-") >= 0;
+  }
+  function ipv4SiteHost(host) {
+    var parts = host.split(".");
+    if (parts.length !== 4) return false;
+    for (var i = 0; i < parts.length; i++) {
+      if (!/^[0-9]+$/.test(parts[i]) || Number(parts[i]) > 255) return false;
+    }
+    return true;
+  }
+  function plausibleSiteAuthorityClient(value, parsed, allowUserinfo, allowSingleLabel) {
+    var authority = authorityOfSite(value);
+    if (!authority || authority.charAt(0) === "/") return false;
+    var hostPart = hostPartOfSiteAuthority(authority, allowUserinfo);
+    if (!hostPart) return false;
+    var host = normalizeSiteHost(parsed.hostname);
+    if (!host) return false;
+    if (hostPart.charAt(0) === "[") return host.indexOf(":") >= 0;
+    if (ipv4SiteHost(host)) return ipv4SiteHost(hostPart);
+    return host === "localhost" || dottedSiteHost(host) ||
+      (allowSingleLabel && plausibleSingleLabelSiteHost(host));
+  }
+  function unsafeSiteHost(rawHost) {
+    var host = normalizeSiteHost(rawHost);
+    if (
+      !host ||
+      host === "localhost" ||
+      host === "local" ||
+      host === "internal" ||
+      host.endsWith(".local") ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".internal") ||
+      host.endsWith(".home.arpa")
+    ) return true;
+    if (ipv4SiteHost(host)) {
+      var parts = host.split(".").map(Number);
+      var first = parts[0];
+      var second = parts[1];
+      return first === 0 || first === 10 || first === 127 ||
+        (first === 100 && second >= 64 && second <= 127) ||
+        (first === 169 && second === 254) ||
+        (first === 172 && second >= 16 && second <= 31) ||
+        (first === 192 && (second === 0 || second === 2 || second === 168)) ||
+        (first === 198 && (second === 18 || second === 19 || second === 51)) ||
+        (first === 203 && second === 0) || first >= 224;
+    }
+    if (host.indexOf(":") < 0) return false;
+    var firstGroup = host.split(":")[0];
+    return host === "::" || host === "::1" ||
+      host.indexOf("::ffff:") === 0 ||
+      host.indexOf("fc") === 0 || host.indexOf("fd") === 0 ||
+      host.indexOf("ff") === 0 ||
+      (firstGroup.indexOf("fe") === 0 && "89abcdef".indexOf(firstGroup.charAt(2)) >= 0) ||
+      host.indexOf("2001:db8:") === 0;
+  }
+  function denylistedSiteHost(rawHost) {
+    var host = normalizeSiteHost(rawHost);
+    var listed = [
+      "t.me", "telegram.me", "telegram.dog", "wa.me", "whatsapp.com",
+      "api.whatsapp.com", "chat.whatsapp.com", "web.whatsapp.com", "discord.gg",
+      "discord.com", "discordapp.com", "discord.me", "m.me", "messenger.com",
+      "signal.me", "signal.group", "line.me", "onlyfans.com", "fansly.com",
+      "pornhub.com", "pornhub.org", "pornhubpremium.com", "xvideos.com", "xnxx.com",
+      "xhamster.com", "chaturbate.com", "stripchat.com", "manyvids.com", "redtube.com",
+      "youporn.com", "brazzers.com", "adultfriendfinder.com", "bit.ly", "t.co",
+      "tinyurl.com", "lnkd.in", "ow.ly", "buff.ly", "is.gd", "cutt.ly", "rb.gy",
+    ];
+    for (var i = 0; i < listed.length; i++) {
+      if (host === listed[i] || host.endsWith("." + listed[i])) return true;
+    }
+    return false;
+  }
+  function httpSiteUrl(value) {
+    var lower = value.toLowerCase();
+    return lower.indexOf("http://") === 0 || lower.indexOf("https://") === 0;
+  }
+  function parseGuestSiteUrl(raw) {
+    var original = String(raw || "");
+    if (!original || hasInvalidSiteChars(original)) return null;
+    var value = original.trim();
+    if (!value || /\\s/.test(value)) return null;
+    if (value.indexOf("///") === 0 ||
+        (value.indexOf("/") === 0 && value.indexOf("//") !== 0)) return null;
+    var protocolRelative = value.indexOf("//") === 0;
+    var explicitHttp = httpSiteUrl(value);
+    if (!explicitHttp && !protocolRelative && authoritySchemeSiteUrl(value)) return null;
+    var candidateText = protocolRelative ? "https:" + value : explicitHttp ? value : "https://" + value;
+    var authority = authorityOfSite(value);
+    if (!authority || authority.charAt(0) === "/") return null;
+    var parsed;
+    try {
+      parsed = new URL(candidateText);
+    } catch (err) {
+      return null;
+    }
+    if (parsed.protocol !== "https:" || !parsed.hostname) return null;
+    if (!plausibleSiteAuthorityClient(value, parsed, explicitHttp || protocolRelative, protocolRelative)) return null;
+    if (unsafeSiteHost(parsed.hostname)) return null;
+    if (denylistedSiteHost(parsed.hostname)) return null;
+    return parsed;
+  }
   (function () {
     var min = ${MIN_BID_USD};
     var input = document.getElementById("bid");
@@ -1177,20 +1349,10 @@ ${studio}
       listings = [];
     }
     function identityFrom(raw) {
-      var value = String(raw || "").trim();
-      if (!value) return "";
-      var candidates = value.indexOf("//") === 0
-        ? [value, "https:" + value]
-        : [value, "https://" + value];
-      for (var i = 0; i < candidates.length; i++) {
-        try {
-          var parsed = new URL(candidates[i]);
-          if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) continue;
-          var path = parsed.pathname.replace(/\\/+$/, "") || "/";
-          return parsed.hostname.toLowerCase() + path;
-        } catch (e) {}
-      }
-      return "";
+      var parsed = parseGuestSiteUrl(raw);
+      if (!parsed) return "";
+      var path = parsed.pathname.replace(/\\/+$/, "") || "/";
+      return siteIdentityHost(parsed) + path;
     }
     function matchedListing() {
       var id = identityFrom(siteInput && siteInput.value);
@@ -1300,20 +1462,7 @@ ${studio}
       var name = form.querySelector('input[name="name"]');
       var site = form.querySelector('input[name="siteUrl"]');
       var line = form.querySelector('input[name="oneLiner"]');
-      var validSite = false;
-      var rawSite = String(site && site.value || "").trim();
-      var siteCandidates = rawSite.indexOf("//") === 0
-        ? ["https:" + rawSite]
-        : [/^https?:\\/\\//i.test(rawSite) ? rawSite : "https://" + rawSite];
-      for (var i = 0; i < siteCandidates.length; i++) {
-        try {
-          var parsed = new URL(siteCandidates[i]);
-          if (parsed.protocol === "https:" && Boolean(parsed.hostname)) {
-            validSite = true;
-            break;
-          }
-        } catch (err) {}
-      }
+      var validSite = Boolean(parseGuestSiteUrl(site && site.value));
       var ready = Boolean(name && String(name.value).trim() && line && String(line.value).trim() && validSite);
       if (!submit.hasAttribute("data-locked-action")) submit.disabled = !ready;
       submit.setAttribute("aria-disabled", ready ? "false" : "true");

@@ -220,3 +220,97 @@ test("bare site domains default to https before the existing hygiene checks", ()
   assert.equal(listing.siteUrl, "https://bare.example/guest");
   assert.equal(getListing(db, listing.id)?.siteUrl, "https://bare.example/guest");
 });
+
+test("URL inference rejects schemes, malformed authorities, and private targets", () => {
+  const rejected = [
+    "javascript:123",
+    "data:123",
+    "ftp:123",
+    "mailto:123",
+    "custom:123",
+    "javascript:foo@evil.com",
+    "javascript\n://example.com",
+    "data\t://example.com",
+    "ftp\r://example.com",
+    "http\n://example.com",
+    "javascript" + String.fromCharCode(92) + "://example.com",
+    "https" + String.fromCharCode(92) + "://example.com",
+    "//" + String.fromCharCode(92) + "evil.com",
+    "//evil.com" + String.fromCharCode(92) + "path",
+    "/path",
+    "///example.com",
+    "////example.com",
+    "https:///example.com",
+    "example.com:/path",
+    "example.com:bad/path",
+    "example.com:65536/path",
+    "//example.com:65536/path",
+  ];
+  for (const value of rejected) {
+    assert.throws(
+      () => canonicalizeSiteUrl(value),
+      (err: unknown) =>
+        err instanceof HygieneError &&
+        (err.code === "invalid_url" || err.code === "https_required"),
+      value,
+    );
+  }
+
+  for (const value of [
+    "localhost",
+    "localhost:3000",
+    "internal",
+    "dev.local",
+    "127.0.0.1",
+    "10.0.0.1",
+    "100.64.0.1",
+    "169.254.169.254",
+    "172.16.0.1",
+    "192.0.2.1",
+    "192.168.1.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "[::]",
+    "[::1]",
+    "[fc00::1]",
+    "[fe80::1]",
+    "[fec0::1]",
+    "[ff02::1]",
+    "[::ffff:127.0.0.1]",
+    "[::ffff:192.168.1.1]",
+    "[2001:db8::1]",
+  ]) {
+    assert.throws(
+      () => canonicalizeSiteUrl(value),
+      (err: unknown) => err instanceof HygieneError && err.code === "invalid_url",
+      value,
+    );
+  }
+
+  assert.equal(canonicalizeSiteUrl("public.example/path"), "https://public.example/path");
+  assert.equal(
+    canonicalizeSiteUrl("public.example:8443/path"),
+    "https://public.example:8443/path",
+  );
+  assert.equal(canonicalizeSiteUrl("//public.example/path"), "https://public.example/path");
+  assert.equal(canonicalizeSiteUrl("//public-host"), "https://public-host/");
+  assert.equal(canonicalizeSiteUrl("8.8.8.8:443/dns"), "https://8.8.8.8/dns");
+  assert.equal(
+    canonicalizeSiteUrl("https://[2001:4860:4860::8888]/dns"),
+    "https://[2001:4860:4860::8888]/dns",
+  );
+});
+
+test("denylisted hosts cannot bypass policy with repeated trailing dots", () => {
+  for (const [value, code] of [
+    ["t.me..", "chat_link"],
+    ["sub.onlyfans.com...", "nsfw"],
+    ["bit.ly....", "url_shortener"],
+  ] as const) {
+    assert.throws(
+      () => canonicalizeSiteUrl(value),
+      (err: unknown) => err instanceof HygieneError && err.code === code,
+      value,
+    );
+  }
+});
