@@ -174,8 +174,15 @@ function liveListingRefs(rows: readonly BoardRow[]): LiveListingRef[] {
 export function siteIdentityFromGuestInput(raw: string): string | undefined {
   const value = raw.trim();
   if (!value) return undefined;
-  for (const candidate of [value, `https://${value}`]) {
+  const candidates = value.startsWith("//")
+    ? [value, `https:${value}`]
+    : [value, `https://${value}`];
+  for (const candidate of candidates) {
     try {
+      const parsed = new URL(candidate);
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) {
+        continue;
+      }
       return siteIdentity(candidate);
     } catch {
       // try the next candidate
@@ -799,7 +806,7 @@ function renderClaim(input: {
   const identityFields = `<div class="fields" data-identity-fields>
       <div class="identity-primary">
         <label class="sr-only" for="claim-site">Site</label>
-        <input id="claim-site" name="siteUrl" type="url" required placeholder="https://your-site"${disabled} data-slot="url-input"/>
+        <input id="claim-site" name="siteUrl" type="text" inputmode="url" autocomplete="url" required placeholder="your-site.example"${disabled} data-slot="url-input"/>
       </div>
       <details class="identity-details">
         <summary data-slot="category-control">Guest details</summary>
@@ -812,7 +819,7 @@ function renderClaim(input: {
       </details>
     </div>`;
   const bidForm = `${identityFields}
-    <button type="submit" class="outbid"${disabled}${occupiedLive ? " data-occupied-outbid" : ""} data-slot="claim-button" data-business-action="Outbid" aria-label="Outbid — Claim rank">Outbid${occupiedLive ? '<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name></span></span>' : ""}</button>`;
+    <button type="submit" class="outbid"${disabled}${occupiedLive ? " data-occupied-outbid" : ""} data-slot="claim-button" data-business-action="Outbid" aria-label="Claim rank">Claim rank${occupiedLive ? '<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name></span></span>' : ""}</button>`;
   const claimClass = emptyClaimFirst
     ? `claim empty-claim-first${noEligible ? " no-eligible" : ""}`
     : occupiedLive
@@ -849,12 +856,12 @@ function renderClaim(input: {
     raiseChargeUsd !== undefined && topUsd !== undefined
       ? `<label class="bid-field" data-raise-amount-field${liveListingsAttr}>
         <span class="sr-only">New total in dollars. A new guest pays the full bid; the same listing pays only the raise difference.</span>
-        <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}"${disabled}/></span>
+        <span class="bid-amount">$<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-current-usd="${topUsd}" data-bid-input${disabled}/></span>
         <span class="raise-amount" data-raise-amount data-waffo-lead="new"><span data-new-guest-waffo-charge>New listing: $<span data-new-bid-usd>${input.defaultBid}</span>. Raise: $<span data-raise-amount-usd>${raiseChargeUsd}</span></span><span data-raiser-waffo-charge hidden>Raise charge: $<span data-raise-lead-usd>${raiseChargeUsd}</span> — only the difference</span><span data-raiser-guest hidden>. Raising <span data-raiser-guest-name></span>.</span></span>
       </label>`
       : `<label class="bid-field">
         <span class="sr-only">Amount in dollars</span>
-        $<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}"${disabled}/>
+        $<input id="bid" name="bidUsd" form="bid-form" inputmode="numeric" pattern="[0-9]*" value="${input.defaultBid}" data-bid-input${disabled}/>
       </label>`;
   return `<section class="${claimClass}" id="claim" data-slot="claim-hero" data-claim-state="${claimState}"${live}${openSeat}${honest}${nextMark}${emptyClaimMarks}>
   <h1 class="claim-title" data-slot="claim-heading"${titleMarks}>
@@ -1136,6 +1143,10 @@ ${studio}
       var n = parseInt(String(raw).replace(/[^0-9]/g, ""), 10);
       return Number.isFinite(n) ? Math.max(min, n) : min;
     }
+    function sizeBidInput(value) {
+      var digits = String(Math.max(min, value)).length;
+      input.style.width = String(Math.max(2, Math.min(8, digits))) + "ch";
+    }
     var current = parseInt(String(input.getAttribute("data-current-usd") || ""), 10);
     var chargeUsd = document.querySelector("[data-raise-amount-usd]");
     var newBidUsd = document.querySelector("[data-new-bid-usd]");
@@ -1168,10 +1179,13 @@ ${studio}
     function identityFrom(raw) {
       var value = String(raw || "").trim();
       if (!value) return "";
-      var candidates = [value, "https://" + value];
+      var candidates = value.indexOf("//") === 0
+        ? [value, "https:" + value]
+        : [value, "https://" + value];
       for (var i = 0; i < candidates.length; i++) {
         try {
           var parsed = new URL(candidates[i]);
+          if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) continue;
           var path = parsed.pathname.replace(/\\/+$/, "") || "/";
           return parsed.hostname.toLowerCase() + path;
         } catch (e) {}
@@ -1188,6 +1202,7 @@ ${studio}
     }
     function syncCharge() {
       var next = parseBid(input.value);
+      sizeBidInput(next);
       if (newBidUsd) newBidUsd.textContent = String(next);
       if (chargeUsd && Number.isFinite(current)) {
         chargeUsd.textContent = String(next > current ? next - current : 0);
@@ -1274,6 +1289,7 @@ ${studio}
       siteInput.addEventListener("input", syncCharge);
       siteInput.addEventListener("change", syncCharge);
     }
+    syncCharge();
   })();
   (function () {
     var form = document.getElementById("bid-form");
@@ -1285,10 +1301,19 @@ ${studio}
       var site = form.querySelector('input[name="siteUrl"]');
       var line = form.querySelector('input[name="oneLiner"]');
       var validSite = false;
-      try {
-        var parsed = new URL(String(site && site.value || ""));
-        validSite = parsed.protocol === "https:" && Boolean(parsed.hostname);
-      } catch (err) {}
+      var rawSite = String(site && site.value || "").trim();
+      var siteCandidates = rawSite.indexOf("//") === 0
+        ? ["https:" + rawSite]
+        : [/^https?:\\/\\//i.test(rawSite) ? rawSite : "https://" + rawSite];
+      for (var i = 0; i < siteCandidates.length; i++) {
+        try {
+          var parsed = new URL(siteCandidates[i]);
+          if (parsed.protocol === "https:" && Boolean(parsed.hostname)) {
+            validSite = true;
+            break;
+          }
+        } catch (err) {}
+      }
       var ready = Boolean(name && String(name.value).trim() && line && String(line.value).trim() && validSite);
       if (!submit.hasAttribute("data-locked-action")) submit.disabled = !ready;
       submit.setAttribute("aria-disabled", ready ? "false" : "true");

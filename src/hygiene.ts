@@ -90,8 +90,28 @@ function hostnameOf(parsed: URL): string {
   return parsed.hostname.toLowerCase().replace(/\.$/, "");
 }
 
+function looksLikeBareSiteUrl(value: string): boolean {
+  if (!value || /\s/.test(value) || /^[a-z][a-z\d+.-]*:\/\//i.test(value)) return false;
+  try {
+    const candidate = value.startsWith("//")
+      ? new URL(`https:${value}`)
+      : new URL(`https://${value}`);
+    return Boolean(candidate.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function urlCandidate(value: string): string {
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("//")) return `https:${value}`;
+  if (looksLikeBareSiteUrl(value)) return `https://${value}`;
+  return value;
+}
+
 /**
- * https only. Drop userinfo, hash, and every query parameter.
+ * https only. Bare site hosts receive an https scheme. Drop userinfo, hash,
+ * and every query parameter.
  * Reject chat/invite, NSFW, and unresolved shorteners.
  */
 export function canonicalizeSiteUrl(raw: string): string {
@@ -102,7 +122,7 @@ export function canonicalizeSiteUrl(raw: string): string {
 
   let parsed: URL;
   try {
-    parsed = new URL(trimmed);
+    parsed = new URL(urlCandidate(trimmed));
   } catch {
     throw new HygieneError("invalid_url", "site URL is not a valid URL");
   }

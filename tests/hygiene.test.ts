@@ -184,3 +184,39 @@ test("canonicalize drops userinfo, hash, all query, default port", () => {
     "https://example.com/Path",
   );
 });
+
+test("bare site domains default to https before the existing hygiene checks", () => {
+  assert.equal(
+    canonicalizeSiteUrl(" Example.COM/guest/?utm_source=board#fragment "),
+    "https://example.com/guest",
+  );
+  assert.equal(canonicalizeSiteUrl("//EXAMPLE.com/path/"), "https://example.com/path");
+  assert.equal(canonicalizeSiteUrl("example.com:8443/path"), "https://example.com:8443/path");
+  assert.throws(
+    () => canonicalizeSiteUrl("discord.gg/invite/abc"),
+    (err: unknown) => err instanceof HygieneError && err.code === "chat_link",
+  );
+  assert.throws(
+    () => canonicalizeSiteUrl("onlyfans.com/guest"),
+    (err: unknown) => err instanceof HygieneError && err.code === "nsfw",
+  );
+  assert.throws(
+    () => canonicalizeSiteUrl("bit.ly/guest"),
+    (err: unknown) => err instanceof HygieneError && err.code === "url_shortener",
+  );
+
+  const db = memoryDb();
+  const episode = guestSeat(db, "ep_bare_domain");
+  const listing = insertListing(db, {
+    id: "lst_bare_domain",
+    episodeId: episode.id,
+    name: "Bare Domain Guest",
+    siteUrl: "bare.example/guest",
+    oneLiner: "A bare domain is canonicalized on insert.",
+    bidUsd: 5,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  assert.equal(listing.siteUrl, "https://bare.example/guest");
+  assert.equal(getListing(db, listing.id)?.siteUrl, "https://bare.example/guest");
+});

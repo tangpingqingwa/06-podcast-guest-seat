@@ -247,7 +247,7 @@ main { min-height: 420px; padding: 0 0 72px; }
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-height: 60px;
   margin: 0;
   color: var(--foreground);
@@ -257,11 +257,12 @@ main { min-height: 420px; padding: 0 0 72px; }
   letter-spacing: -0.06em;
   line-height: 60px;
 }
-.bid-stepper { display: inline-flex; align-items: center; gap: 10px; }
-.step { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 16px; font-weight: 800; line-height: 1; }
+.claim-title > span:first-child { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.bid-stepper { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; white-space: nowrap; }
+.step { display: inline-grid; flex: 0 0 24px; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 16px; font-weight: 800; line-height: 1; }
 .step:hover { background: var(--primary); color: var(--primary-foreground); }
-.bid-field { display: inline-flex; align-items: center; color: var(--primary); font-weight: 750; font-variant-numeric: tabular-nums; }
-.bid-field input { width: 5.8ch; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; text-align: start; }
+.bid-field { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-width: 0; color: var(--primary); font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bid-field input { width: 2ch; min-width: 2ch; max-width: 8ch; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; text-align: center; }
 .bid-field[data-raise-amount-field] { flex-direction: column; gap: 1px; }
 .bid-field[data-raise-amount-field] .bid-amount { text-decoration: none; }
 .raise-amount { position: absolute; width: 1px; height: 1px; max-width: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
@@ -523,11 +524,12 @@ body > footer { padding: 0 0 32px; color: var(--muted-foreground); font-size: 12
   .mobile-context .ranking-tabs { padding: 3px; }
   .mobile-context .ranking-tab { min-height: 30px; padding: 4px 10px; }
   .claim { margin-top: 25px; }
-  .claim-title { flex-wrap: nowrap; min-width: 0; min-height: 36px; font-size: 24px; line-height: 36px; letter-spacing: -0.055em; gap: 4px; white-space: nowrap; }
-  .claim-title > span:first-child { flex: 0 0 auto; }
-  .bid-stepper { gap: 4px; }
+  .claim-title { flex-wrap: wrap; justify-content: center; min-width: 0; min-height: 36px; font-size: 24px; line-height: 30px; letter-spacing: -0.055em; gap: 6px 8px; text-align: center; white-space: normal; }
+  .claim-title > span:first-child { flex: 0 1 auto; max-width: 100%; }
+  .bid-stepper { gap: 6px; }
   .step { width: 22px; height: 22px; font-size: 14px; }
-  .bid-field input { width: 5.6ch; }
+  .step { flex-basis: 22px; }
+  .bid-field input { width: 2ch; min-width: 2ch; }
   .bid-form { display: grid; gap: 8px; margin-top: 18px; }
   .fields { grid-template-columns: 1fr; gap: 8px; }
   .fields input { height: 44px; border-radius: 20px; font-size: 14px; }
@@ -700,10 +702,11 @@ main { min-height: 520px; padding: 0 0 88px; }
   text-align: left;
 }
 .claim-console .claim-title {
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 58px;
+  min-width: 0;
   color: var(--foreground);
-  text-align: left;
+  text-align: center;
   font-size: clamp(30px, 3.4vw, 46px);
   line-height: 1.12;
 }
@@ -735,16 +738,21 @@ main { min-height: 520px; padding: 0 0 88px; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
+  min-width: 0;
   gap: 10px;
   margin-top: 22px;
 }
 .claim-console .fields {
   grid-column: 1;
+  width: 100%;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 0.72fr);
 }
+.claim-console .identity-primary, .claim-console .identity-details { width: 100%; }
+.claim-console .identity-details > summary { width: 100%; }
 .claim-console .outbid {
   grid-column: 2;
   align-self: end;
+  max-width: 100%;
   min-width: 132px;
 }
 .rundown-desk {
@@ -981,7 +989,7 @@ main { min-height: 520px; padding: 0 0 88px; }
   .episode-slate-column .mobile-context { display: flex; margin-top: 0; }
   .episode-slate-column .ranking-tabs { height: 34px; }
   .claim-console .claim { padding: 21px 18px; border-radius: 20px; }
-  .claim-console .claim-title { flex-wrap: nowrap; min-height: 0; font-size: 24px; line-height: 30px; white-space: nowrap; }
+  .claim-console .claim-title { flex-wrap: wrap; justify-content: center; min-height: 0; font-size: 24px; line-height: 30px; text-align: center; white-space: normal; }
   .claim-console .bid-form { grid-template-columns: 1fr; gap: 8px; margin-top: 18px; }
   .claim-console .fields { grid-column: 1; grid-template-columns: 1fr; gap: 8px; }
   .claim-console .outbid { grid-column: 1; width: 100%; }
@@ -1587,8 +1595,10 @@ export const OCCUPIED_IDENTITY_CSS = /* css */ `
 .studio.studio-open-occupied .claim-console .claim-title {
   height: auto !important;
   min-height: 58px !important;
+  min-width: 0 !important;
   line-height: 1.12 !important;
-  text-align: left !important;
+  justify-content: center !important;
+  text-align: center !important;
 }
 .studio.studio-open-occupied .claim-console .claim-note,
 .studio.studio-open-occupied .claim-console .form-hint {
@@ -1660,9 +1670,11 @@ export const OCCUPIED_IDENTITY_CSS = /* css */ `
 @media (max-width: 760px) {
   .studio.studio-open-occupied .claim-console .claim { padding: 21px 18px !important; border-radius: 20px !important; }
   .studio.studio-open-occupied .claim-console .claim-title {
+    justify-content: center !important;
     min-height: 0 !important;
     font-size: 30px !important;
     line-height: 35px !important;
+    text-align: center !important;
     white-space: normal !important;
   }
   .studio.studio-open-occupied .rundown-column .guest {

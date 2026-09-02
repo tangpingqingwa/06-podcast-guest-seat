@@ -427,7 +427,7 @@ test("POST /host/open from the desk opens a guest-seat episode so Waffo can char
   assert.doesNotMatch(board.body, /Skip the host desk/);
   assert.doesNotMatch(board.body, /Already on this episode\?/);
   assert.doesNotMatch(board.body, /name="bidUsd"[^>]*disabled/);
-  assert.match(board.body, />Outbid<\/button>/);
+  assert.match(board.body, />Claim rank<\/button>/);
 
   const checkout = await app.inject({
     method: "POST",
@@ -703,6 +703,8 @@ test("board shell keeps the compact responsive controls and guest-seat markers",
   assert.match(studio, /data-slot="url-input"/);
   assert.match(studio, /data-slot="category-control"/);
   assert.match(studio, /data-slot="claim-button"/);
+  assert.match(studio, /name="siteUrl" type="text" inputmode="url" autocomplete="url" required placeholder="your-site\.example"/);
+  assert.match(studio, /data-business-action="Outbid" aria-label="Claim rank">Claim rank/);
   assert.match(studio, /data-slot="top-three"/);
   const ticketAt = studio.indexOf('data-show-ticket');
   const periodAt = studio.indexOf('data-slot="period-tabs"');
@@ -755,9 +757,11 @@ test("board shell keeps the compact responsive controls and guest-seat markers",
     html,
     /\.studio\.studio-open-occupied \.guest\[data-guest-prize\]\[data-paid-at\] \.guest-name \{\s*font-size: 16px;/,
   );
-  assert.match(html, /\.bid-field input \{[^}]*text-align: start; \}/);
+  assert.match(html, /\.bid-field input \{[^}]*width: 2ch;[^}]*min-width: 2ch;[^}]*text-align: center; \}/);
+  assert.match(html, /\.bid-stepper \{[^}]*gap: 6px;[^}]*white-space: nowrap; \}/);
+  assert.match(html, /\.claim-console \.claim-title \{[^}]*justify-content: center;[^}]*text-align: center;/);
   assert.match(html, /\.step \{[^}]*place-items: center;[^}]*line-height: 1; \}/);
-  assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.claim-title \{[^}]*font-size: 24px;[^}]*line-height: 36px;/);
+  assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.claim-title \{[^}]*font-size: 24px;[^}]*line-height: 30px;/);
   assert.match(html, /\.outbid \{[^}]*font-size: 14px;[^}]*white-space: nowrap; \}/);
   assert.doesNotMatch(html, /\.outbid::before|\.outbid[^}]*content:\s*["']Claim rank/);
   assert.match(
@@ -768,7 +772,6 @@ test("board shell keeps the compact responsive controls and guest-seat markers",
     html,
     /\.outbid:disabled \{ background: #e19b87; color: var\(--primary-foreground\); opacity: 0\.68; \}/,
   );
-  assert.match(studio, /data-business-action="Outbid" aria-label="Outbid — Claim rank">Outbid/);
   assert.match(html, /\.cue-num \{ display: inline-flex/);
   assert.match(html, /@media \(max-width: 760px\)/);
   assert.doesNotMatch(html, /fonts\.googleapis\.com/);
@@ -926,7 +929,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   const liveAt = body.indexOf("data-claim-live");
   const openSeatAt = body.indexOf(" data-open-seat");
   const ticketAt = body.indexOf("data-show-ticket");
-  const outbidAt = body.indexOf(">Outbid</button>");
+  const outbidAt = body.indexOf(">Claim rank</button>");
   assert.notEqual(claimAt, -1);
   assert.notEqual(nextSeatAt, -1);
   assert.notEqual(liveAt, -1);
@@ -953,7 +956,7 @@ test("GET / after the host opens N+1 makes bidding that empty seat live", async 
   assert.match(body, /data-claim-live/);
   assert.match(body, /name="episodeId" value="[^"]+"/);
   assert.match(body, /value="5"/);
-  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, />Claim rank<\/button>/);
   assert.match(body, /Host review is on\./);
   assert.doesNotMatch(body, /data-waiting-on-host/);
   assert.doesNotMatch(body, /No open episode yet/);
@@ -1027,7 +1030,7 @@ test("GET / on a fresh-open empty episode makes bidding the guest seat live", as
   assert.match(body, /data-identity-fields/);
   assert.match(body, /name="episodeId"/);
   assert.match(body, /value="5"/);
-  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, />Claim rank<\/button>/);
   assert.doesNotMatch(body, /Claim the guest seat for/);
   assert.match(body, /The guest seat is open/);
   assert.match(body, /data-claim-live/);
@@ -1088,7 +1091,7 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   const liveAt = studio.indexOf("data-claim-live");
   const takesAt = studio.indexOf("$5 takes #1");
   const ticketAt = studio.indexOf("data-show-ticket");
-  const outbidAt = studio.indexOf(">Outbid</button>");
+  const outbidAt = studio.indexOf(">Claim rank</button>");
   const lockCertainAt = studio.indexOf("data-claim-locked");
   const lockedTitleAt = studio.indexOf("Episode 1 is locked");
   assert.notEqual(claimAt, -1);
@@ -1117,7 +1120,7 @@ test("GET / on a fresh-open empty episode stays empty-honest — no lock chrome"
   assert.match(body, /data-claim-live/);
   assert.match(body, /name="episodeId" value="ep_open_honest"/);
   assert.match(body, /value="5"/);
-  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, />Claim rank<\/button>/);
   assert.match(body, /data-episode-open="true"/);
   assert.match(studio, /class="studio studio-open-empty"/);
   assert.match(studio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
@@ -1193,7 +1196,7 @@ test("GET / on a fresh-open empty episode isolates $5 from lock / prize leak", a
   const honestAt = studio.indexOf("data-empty-honest");
   const claimAt = studio.indexOf('id="claim"');
   const takesAt = studio.indexOf("$5 takes #1");
-  const outbidAt = studio.indexOf(">Outbid</button>");
+  const outbidAt = studio.indexOf(">Claim rank</button>");
   assert.notEqual(shellAt, -1);
   assert.notEqual(honestAt, -1);
   assert.notEqual(claimAt, -1);
@@ -1210,7 +1213,7 @@ test("GET / on a fresh-open empty episode isolates $5 from lock / prize leak", a
   assert.match(body, /data-claim-live/);
   assert.match(body, /data-open-seat/);
   assert.match(body, /value="5"/);
-  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, />Claim rank<\/button>/);
   assert.match(body, /action="\/checkout"/);
   assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.doesNotMatch(studio, /studio-open-occupied/);
@@ -1276,7 +1279,7 @@ test("GET / on a fresh-open empty episode keeps $5 honest — guest-one-first / 
   const honestAt = studio.indexOf("data-empty-honest");
   const claimAt = studio.indexOf('id="claim"');
   const takesAt = studio.indexOf("$5 takes #1");
-  const outbidAt = studio.indexOf(">Outbid</button>");
+  const outbidAt = studio.indexOf(">Claim rank</button>");
   assert.notEqual(shellAt, -1);
   assert.notEqual(honestAt, -1);
   assert.notEqual(claimAt, -1);
@@ -1293,7 +1296,7 @@ test("GET / on a fresh-open empty episode keeps $5 honest — guest-one-first / 
   assert.match(body, /data-claim-live/);
   assert.match(body, /data-open-seat/);
   assert.match(body, /value="5"/);
-  assert.match(body, />Outbid<\/button>/);
+  assert.match(body, />Claim rank<\/button>/);
   assert.match(body, /action="\/checkout"/);
   assert.match(body, /name="episodeId" value="ep_open_no_guest_leak"/);
   assert.equal(countExact(studio, "data-empty-honest"), 3);
@@ -1409,7 +1412,7 @@ test("studio rundown is a guest card, not a table: name, one-liner, site, bid, v
   assert.match(body, /data-show-ticket/);
   assert.match(body, /Episode 12/);
   assert.match(body, /Claim #1 for/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   assert.match(body, /action="\/checkout"/);
   assert.match(body, /name="name"/);
   assert.match(body, /name="siteUrl"/);
@@ -1672,7 +1675,7 @@ test("GET / on an occupied live seat keeps $bid a later fact beside the guest la
   assert.equal(countExact(studio, "data-later-seat"), 1);
   assert.match(body, /data-claim-live/);
   assert.match(body, /Claim #1 for/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   assert.match(body, /action="\/checkout"/);
   assert.match(studio, /Claim #1 for/);
   assert.doesNotMatch(studio, /data-empty-claim-first/);
@@ -1927,7 +1930,7 @@ test("GET / on occupied live keeps #1 guest the first click — later seats stay
   assert.doesNotMatch(body, /This episode is locked/);
   assert.match(body, /data-claim-live/);
   assert.match(body, /Claim #1 for/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   assert.match(body, /action="\/checkout"/);
   const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
   const prizeName = studioCss.match(
@@ -2123,7 +2126,7 @@ test("GET / on occupied live keeps later seats quieter than #1 guest — prize s
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   assert.match(body, /data-claim-live/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
   assert.match(studioCss, /\.studio\.studio-open-occupied \.guest\.later-seat\[data-later-seat\]\[data-paid-at\] \.later-foot/);
   assert.match(studioCss, /grid-template-areas:\s*"cue person price"\s*"cue person price"\s*"cue foot price"/);
@@ -2278,7 +2281,7 @@ test("GET / on occupied live keeps #1 guest prize chrome — later-foot cannot l
   assert.doesNotMatch(studio, /studio-open-empty/);
   assert.match(body, /data-claim-live/);
   assert.match(body, /Claim #1 for/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
@@ -2378,7 +2381,7 @@ test("GET / on occupied live keeps one first click — host Lock stays after the
   const deskAt = studio.indexOf("data-host-lock");
   const lockBtnAt = studio.indexOf('class="lock-episode"');
   const sessionAt = studio.indexOf('placeholder="Host session"');
-  const outbidAt = studio.indexOf(">Outbid");
+  const outbidAt = studio.indexOf(">Claim rank");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(claimAt, -1);
   assert.notEqual(rundownAt, -1);
@@ -2441,7 +2444,7 @@ test("GET / on occupied live keeps one first click — host Lock stays after the
   assert.doesNotMatch(studio, /This episode is locked/);
   assert.match(body, /data-claim-live/);
   assert.match(body, /Claim #1 for/);
-  assert.match(body, />Outbid</);
+  assert.match(body, />Claim rank</);
   assert.match(body, /action="\/checkout"/);
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
@@ -2522,7 +2525,7 @@ test("GET / on occupied live keeps one first click — Claim stays after the #1 
   const laterClaimAt = studio.indexOf('data-claim-state="open-occupied"');
   const claimAt = studio.indexOf('id="claim"');
   const claimTitleAt = studio.indexOf("Claim #1 for");
-  const outbidAt = studio.indexOf(">Outbid");
+  const outbidAt = studio.indexOf(">Claim rank");
   const deskAt = studio.indexOf("data-host-lock");
   const lockBtnAt = studio.indexOf('class="lock-episode"');
   const sessionAt = studio.indexOf('placeholder="Host session"');
@@ -2582,7 +2585,7 @@ test("GET / on occupied live keeps one first click — Claim stays after the #1 
   assert.match(claimBlock, /A host lock still closes the episode/);
   assert.match(claimBlock, /Host review is on\./);
   assert.match(claimBlock, /Already on this episode\?/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /action="\/checkout"/);
   assert.doesNotMatch(claimBlock, /data-empty-claim-window/);
   assert.doesNotMatch(claimBlock, /data-first-click="claim"/);
@@ -2824,7 +2827,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   const laterClaimWindowAt = occupied.indexOf("data-occupied-window");
   const rollingCopyAt = occupied.indexOf("Paid placements remain eligible for seven days");
   const claimAt = occupied.indexOf('id="claim"');
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(rundownAt, -1);
@@ -2869,7 +2872,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
   assert.match(occupied, /class="claim occupied-claim"/);
   assert.match(occupied, /data-claim-state="open-occupied"/);
   assert.match(occupied, /Claim #1 for/);
-  assert.match(occupied, />Outbid</);
+  assert.match(occupied, />Claim rank</);
   assert.match(occupied, /data-host-lock/);
   assert.match(occupied, /Lock Episode 12 — book Ada Lovelace\./);
   assert.match(occupied, /Hard Sell Co/);
@@ -3195,7 +3198,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days on the claim
   const rollingCopyAt = studio.indexOf("Paid placements remain eligible for seven days");
   const mondayAt = studio.indexOf("does not reset at Monday midnight");
   const lockCopyAt = studio.indexOf("A host lock still closes the episode");
-  const outbidAt = studio.indexOf(">Outbid</button>");
+  const outbidAt = studio.indexOf(">Claim rank</button>");
   const windowAt = studio.indexOf("data-empty-window");
   const guestClickAt = studio.indexOf('data-first-click="guest"');
   const weekChromeAt = studio.indexOf("data-rolling-week");
@@ -3243,7 +3246,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days on the claim
   assert.match(studio, /data-empty-window/);
   assert.match(studio, /data-open-seat/);
   assert.match(studio, /data-claim-live/);
-  assert.match(studio, />Outbid<\/button>/);
+  assert.match(studio, />Claim rank<\/button>/);
   assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-empty-claim-window"), 1);
   assert.equal(countExact(studio, "data-empty-window"), 1);
@@ -3417,7 +3420,7 @@ test("GET / on occupied live names rolling last-7-days on occupied-claim beside 
   const mondayAt = occupied.indexOf("does not reset at Monday midnight", laterClaimWindowAt);
   const lockCopyAt = occupied.indexOf("A host lock still closes the episode");
   const vetoCopyAt = occupied.indexOf("Host review is on", laterClaimWindowAt);
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(rundownAt, -1);
@@ -3460,7 +3463,7 @@ test("GET / on occupied live names rolling last-7-days on occupied-claim beside 
   assert.match(claimBlock, /does not reset at Monday midnight/);
   assert.match(claimBlock, /A host lock still closes the episode/);
   assert.match(claimBlock, /Host review is on\./);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(occupied, /data-first-click="guest"/);
   assert.match(occupied, /data-guest-prize/);
   assert.match(occupied, /Ada Lovelace/);
@@ -3555,7 +3558,7 @@ test("GET / on occupied live names rolling last-7-days on occupied-claim beside 
   const liveLaterClaimAt = liveStudio.indexOf('data-claim-state="open-occupied"');
   const liveWindowAt = liveStudio.indexOf("data-occupied-window");
   const liveRollingAt = liveStudio.indexOf("Paid placements remain eligible for seven days");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   const liveGuestAt = liveStudio.indexOf('data-first-click="guest"');
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveWindowAt);
@@ -3675,7 +3678,7 @@ test("GET / on occupied live names the raise difference on occupied-claim beside
   const laterClaimRaiseAt = occupied.indexOf("data-occupied-raise>");
   const rollingCopyAt = occupied.indexOf("Paid placements remain eligible for seven days");
   const raiseCopyAt = occupied.indexOf("You pay only the difference");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const nameAt = occupied.indexOf('name="name"');
   const siteAt = occupied.indexOf('name="siteUrl"');
   const lineAt = occupied.indexOf('name="oneLiner"');
@@ -3726,7 +3729,7 @@ test("GET / on occupied live names the raise difference on occupied-claim beside
   assert.match(claimNote, /data-occupied-raise/);
   assert.match(claimNote, /You pay only the difference/);
   assert.match(claimBlock, /Paid placements remain eligible for seven days/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /class="fields"/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
@@ -3774,7 +3777,7 @@ test("GET / on occupied live names the raise difference on occupied-claim beside
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   const emptyClaimWindowAt = emptyStudio.indexOf("data-empty-claim-window");
   const emptyClaimNote = emptyStudio.slice(
     emptyStudio.indexOf('class="claim-note"'),
@@ -3835,7 +3838,7 @@ test("GET / on occupied live names the raise difference on occupied-claim beside
   const liveWindowAt = liveStudio.indexOf("data-occupied-window");
   const liveRaiseAt = liveStudio.indexOf("data-occupied-raise>");
   const liveRaiseCopyAt = liveStudio.indexOf("You pay only the difference");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   const liveNameAt = liveStudio.indexOf('name="name"');
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveWindowAt);
@@ -3957,7 +3960,7 @@ test("GET / on occupied live names the Waffo charge as the raise difference on o
   const laterClaimWindowAt = occupied.indexOf("data-occupied-window");
   const laterClaimRaiseAt = occupied.indexOf("data-occupied-raise>");
   const raiseCopyAt = occupied.indexOf("You pay only the difference");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(rundownAt, -1);
@@ -4005,7 +4008,7 @@ test("GET / on occupied live names the Waffo charge as the raise difference on o
   assert.match(bidField, /data-current-usd="12"/);
   assert.match(claimBlock, /data-occupied-raise>/);
   assert.match(claimBlock, /You pay only the difference/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
   assert.match(occupied, /Ada Lovelace/);
@@ -4047,7 +4050,7 @@ test("GET / on occupied live names the Waffo charge as the raise difference on o
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   assert.match(emptyStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
   assert.match(emptyStudio, /Claim #1 for/);
   assert.match(emptyStudio, /value="5"/);
@@ -4106,7 +4109,7 @@ test("GET / on occupied live names the Waffo charge as the raise difference on o
   const liveLaterClaimAt = liveStudio.indexOf('data-claim-state="open-occupied"');
   const liveRaiseAmountAt = liveStudio.indexOf("data-raise-amount-field");
   const liveWaffoChargeAt = liveStudio.indexOf("New listing: $");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveRaiseAmountAt);
   assert.ok(liveRaiseAmountAt < liveWaffoChargeAt);
@@ -4235,7 +4238,7 @@ test("GET / on occupied live names Waffo's full new bid for a new guest — rais
     laterClaimRaiseAt,
   );
   const raiseCopyAt = occupied.indexOf("You pay only the difference");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
   assert.notEqual(rundownAt, -1);
@@ -4288,7 +4291,7 @@ test("GET / on occupied live names Waffo's full new bid for a new guest — rais
   assert.match(claimNote, /A new guest pays the full bid/);
   assert.match(claimNote, /Same site raises/);
   assert.match(claimNote, /You pay only the difference/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
@@ -4329,7 +4332,7 @@ test("GET / on occupied live names Waffo's full new bid for a new guest — rais
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   const emptyClaimNote = emptyStudio.slice(
     emptyStudio.indexOf('class="claim-note"'),
     emptyStudio.indexOf("<form"),
@@ -4389,7 +4392,7 @@ test("GET / on occupied live names Waffo's full new bid for a new guest — rais
     liveRaiseAmountUsdAt,
   );
   const liveRaiseCopyAt = liveStudio.indexOf("You pay only the difference");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveNewBidAt);
   assert.ok(liveNewBidAt < liveRaiseAmountUsdAt);
@@ -4571,7 +4574,7 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
     laterClaimRaiseAt,
   );
   const raiseCopyAt = occupied.indexOf("You pay only the difference");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const siteAt = occupied.indexOf('name="siteUrl"');
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
@@ -4646,7 +4649,7 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   assert.match(claimNote, /A new guest pays the full bid/);
   assert.match(claimNote, /Same site raises/);
   assert.match(claimNote, /You pay only the difference/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
@@ -4704,7 +4707,7 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   const emptyClaimNote = emptyStudio.slice(
     emptyStudio.indexOf('class="claim-note"'),
     emptyStudio.indexOf("<form"),
@@ -4771,7 +4774,7 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
     "A new guest pays the full bid",
     liveRaiseLeadAt,
   );
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveNewGuestChargeAt);
   assert.ok(liveNewGuestChargeAt < liveNewBidAt);
@@ -4951,7 +4954,7 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
   const raiserNoteAt = occupied.indexOf("data-raiser-claim-note");
   const raiserClaimUsdAt = occupied.indexOf("data-raiser-claim-usd");
   const raiserNoteCopyAt = occupied.indexOf("the raise difference, not a full bid");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const siteAt = occupied.indexOf('name="siteUrl"');
   const deskAt = occupied.indexOf("data-host-lock");
   assert.notEqual(ticketAt, -1);
@@ -5031,7 +5034,7 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
   assert.doesNotMatch(raiserNote, /A new guest pays the full bid/);
   assert.doesNotMatch(raiserNote, /pays the full bid/);
   assert.doesNotMatch(raiserNote, /you pay a new bid/i);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
@@ -5096,7 +5099,7 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   const emptyClaimNote = emptyStudio.slice(
     emptyStudio.indexOf('class="claim-note"'),
     emptyStudio.indexOf("<form"),
@@ -5163,7 +5166,7 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
     liveNewGuestNoteAt,
   );
   const liveRaiserNoteAt = liveStudio.indexOf("data-raiser-claim-note");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
   assert.ok(liveLaterClaimAt < liveNewGuestChargeAt);
   assert.ok(liveNewGuestChargeAt < liveRaiserChargeAt);
@@ -5337,7 +5340,7 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
   const laterClaimRaiseAt = occupied.indexOf("data-occupied-raise>");
   const newGuestNoteAt = occupied.indexOf("data-new-guest-claim-note");
   const raiserNoteAt = occupied.indexOf("data-raiser-claim-note");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const siteAt = occupied.indexOf('name="siteUrl"');
   const formHintAt = occupied.indexOf('class="form-hint"');
   const formHintMarkAt = occupied.indexOf("data-occupied-form-hint");
@@ -5444,7 +5447,7 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
   assert.doesNotMatch(raiserHint, /pays the full bid/);
   assert.doesNotMatch(raiserHint, /you pay a new bid/i);
   assert.doesNotMatch(raiserHint, /a new guest/i);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
@@ -5510,7 +5513,7 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   const emptyFormHint = emptyStudio.slice(
     emptyStudio.indexOf('class="form-hint"'),
     emptyStudio.indexOf("</section>", emptyStudio.indexOf('class="form-hint"')),
@@ -5574,7 +5577,7 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
   const liveRaiserChargeAt = liveStudio.indexOf("data-raiser-waffo-charge");
   const liveNewGuestNoteAt = liveStudio.indexOf("data-new-guest-claim-note");
   const liveRaiserNoteAt = liveStudio.indexOf("data-raiser-claim-note");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   const liveSiteAt = liveStudio.indexOf('name="siteUrl"');
   const liveFormHintAt = liveStudio.indexOf("data-occupied-form-hint");
   const liveNewGuestHintAt = liveStudio.indexOf("data-new-guest-form-hint");
@@ -5767,7 +5770,7 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
   const laterClaimRaiseAt = occupied.indexOf("data-occupied-raise>");
   const raiserNoteAt = occupied.indexOf("data-raiser-claim-note");
   const noteGuestAt = occupied.indexOf("data-raiser-guest hidden> Raising");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const siteAt = occupied.indexOf('name="siteUrl"');
   const formHintAt = occupied.indexOf('class="form-hint"');
   const raiserHintAt = occupied.indexOf("data-raiser-form-hint hidden");
@@ -5850,7 +5853,7 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
   );
   assert.match(occupied, /&quot;name&quot;:&quot;Ada Lovelace&quot;/);
   assert.match(occupied, /&quot;name&quot;:&quot;Hold Co&quot;/);
-  assert.match(claimBlock, />Outbid/);
+  assert.match(claimBlock, />Claim rank/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(claimBlock, /data-identity-fields/);
   assert.match(occupied, /data-first-click="guest"/);
@@ -5911,7 +5914,7 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   assert.match(emptyStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
   assert.match(emptyStudio, /Claim #1 for/);
   assert.match(emptyStudio, /data-identity-fields/);
@@ -5975,7 +5978,7 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
   const liveWaffoGuestAt = liveStudio.indexOf("data-raiser-guest hidden>. Raising");
   const liveRaiserNoteAt = liveStudio.indexOf("data-raiser-claim-note");
   const liveNoteGuestAt = liveStudio.indexOf("data-raiser-guest hidden> Raising");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   const liveSiteAt = liveStudio.indexOf('name="siteUrl"');
   const liveRaiserHintAt = liveStudio.indexOf("data-raiser-form-hint hidden");
   const liveHintGuestAt = liveStudio.lastIndexOf("data-raiser-guest hidden> Raising");
@@ -6176,7 +6179,7 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   const raiserNoteAt = occupied.indexOf("data-raiser-claim-note");
   const noteGuestAt = occupied.indexOf("data-raiser-guest hidden> Raising");
   const outbidMarkAt = occupied.indexOf("data-occupied-outbid");
-  const outbidAt = occupied.indexOf(">Outbid");
+  const outbidAt = occupied.indexOf(">Claim rank");
   const outbidGuestAt = occupied.indexOf("data-raiser-outbid-guest hidden");
   const outbidGuestNameAt = occupied.indexOf("data-raiser-outbid-guest-name");
   const siteAt = occupied.indexOf('name="siteUrl"');
@@ -6223,7 +6226,7 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   assert.match(occupied, /class="claim occupied-claim"[^>]*id="claim"[^>]*data-claim-state="open-occupied"/);
   assert.match(
     outbidButton,
-    /data-occupied-outbid data-slot="claim-button" data-business-action="Outbid" aria-label="Outbid — Claim rank">Outbid<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name><\/span><\/span><\/button>/,
+    /data-occupied-outbid data-slot="claim-button" data-business-action="Outbid" aria-label="Claim rank">Claim rank<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name><\/span><\/span><\/button>/,
   );
   assert.doesNotMatch(outbidButton, /Raising /);
   assert.match(
@@ -6304,11 +6307,11 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   after(() => emptyApp.close());
   const emptyBoard = await emptyApp.inject({ method: "GET", url: "/" });
   const emptyStudio = studioMarkup(emptyBoard.body);
-  const emptyOutbidAt = emptyStudio.indexOf(">Outbid</button>");
+  const emptyOutbidAt = emptyStudio.indexOf(">Claim rank</button>");
   assert.match(emptyStudio, /class="studio studio-open-empty"[^>]*data-empty-honest/);
   assert.match(emptyStudio, /Claim #1 for/);
   assert.match(emptyStudio, /data-identity-fields/);
-  assert.match(emptyStudio, />Outbid<\/button>/);
+  assert.match(emptyStudio, />Claim rank<\/button>/);
   assert.doesNotMatch(emptyStudio, /data-occupied-outbid/);
   assert.doesNotMatch(emptyStudio, /data-raiser-outbid-guest/);
   assert.doesNotMatch(emptyStudio, /data-raiser-outbid-guest-name/);
@@ -6370,7 +6373,7 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   const liveGuestAt = liveStudio.indexOf('data-first-click="guest"');
   const liveLaterClaimAt = liveStudio.indexOf('data-claim-state="open-occupied"');
   const liveOutbidMarkAt = liveStudio.indexOf("data-occupied-outbid");
-  const liveOutbidAt = liveStudio.indexOf(">Outbid");
+  const liveOutbidAt = liveStudio.indexOf(">Claim rank");
   const liveOutbidGuestAt = liveStudio.indexOf("data-raiser-outbid-guest hidden");
   const liveSiteAt = liveStudio.indexOf('name="siteUrl"');
   assert.ok(liveGuestAt > -1 && liveLaterClaimAt < liveGuestAt);
@@ -6381,7 +6384,7 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
   assert.match(liveStudio, /class="claim occupied-claim"/);
   assert.match(
     liveStudio,
-    /data-occupied-outbid data-slot="claim-button" data-business-action="Outbid" aria-label="Outbid — Claim rank">Outbid<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name><\/span><\/span><\/button>/,
+    /data-occupied-outbid data-slot="claim-button" data-business-action="Outbid" aria-label="Claim rank">Claim rank<span data-raiser-outbid-guest hidden> <span data-raiser-outbid-guest-name><\/span><\/span><\/button>/,
   );
   assert.match(
     liveStudio,
@@ -6792,7 +6795,7 @@ test("GET / on an occupied open episode makes locking the episode the host actio
   assert.match(body, /Hard Sell Co/);
   assert.match(body, /Vetoed: hard sell/);
   assert.match(body, /Already on this episode\?/);
-  assert.match(body, />Outbid/);
+  assert.match(body, />Claim rank/);
   assert.match(studio, /class="studio studio-open-occupied"/);
   assert.doesNotMatch(studio, /studio-open-empty/);
   assert.doesNotMatch(studio, /data-host-open/);
