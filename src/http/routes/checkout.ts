@@ -6,6 +6,8 @@ import {
   ensureCurrentOpenEpisodeWithinTransaction,
   getEpisode,
   isEpisodeLockDue,
+  isEpisodeLockMalformed,
+  retireEpisodeIfNeededWithinTransaction,
   rolloverEpisodeIfDue,
 } from "../../episodes.js";
 import { canonicalizeSiteUrl, HygieneError } from "../../hygiene.js";
@@ -383,15 +385,17 @@ function insertCheckoutIntent(
       if (!episode) {
         throw new CheckoutError("episode_not_found", "episode not found", 404);
       }
-      if (episode.lockedAt) {
+      if (episode.lockedAt !== null) {
         throw new CheckoutError("episode_locked", "episode is locked", 409);
       }
       // Read the clock after BEGIN IMMEDIATE has acquired SQLite's writer
       // lock. A checkout that waited through the deadline must not reuse the
       // pre-transaction timestamp and sneak an intent onto the old board.
       const transactionNow = new Date();
-      if (isEpisodeLockDue(episode, transactionNow)) {
-        const lockedAt = episode.locksAt?.trim() || transactionNow.toISOString();
+      if (isEpisodeLockDue(episode, transactionNow) || isEpisodeLockMalformed(episode)) {
+        const lockedAt = isEpisodeLockMalformed(episode)
+          ? transactionNow.toISOString()
+          : episode.locksAt?.trim() || transactionNow.toISOString();
         const expired = db
           .prepare(
             `UPDATE episodes SET locked_at = ?
@@ -692,14 +696,14 @@ export function quoteCheckout(db: AppDb, body: CheckoutBody): CheckoutDraft {
   }
   let episode = getEpisode(db, episodeId);
   if (!episode) throw new CheckoutError("episode_not_found", "episode not found", 404);
-  if (episode.lockedAt) throw new CheckoutError("episode_locked", "episode is locked", 409);
-  if (isEpisodeLockDue(episode)) {
+  if (episode.lockedAt !== null) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (isEpisodeLockDue(episode) || isEpisodeLockMalformed(episode)) {
     episode = rolloverEpisodeIfDue(db, episodeId).episode;
     if (!episode) {
       throw new CheckoutError("episode_not_found", "episode not found", 404);
     }
   }
-  if (episode.lockedAt || isEpisodeLockDue(episode)) {
+  if (episode.lockedAt !== null || isEpisodeLockDue(episode) || isEpisodeLockMalformed(episode)) {
     throw new CheckoutError("episode_locked", "episode is locked", 409);
   }
   const siteUrl = canonicalizeSiteUrl(rawSiteUrl);
@@ -783,8 +787,10 @@ export function claimPaidCheckout(
 ): Listing {
   const episode = getEpisode(db, session.episodeId);
   if (!episode) throw new CheckoutError("episode_not_found", "episode not found", 404);
-  if (episode.lockedAt) throw new CheckoutError("episode_locked", "episode is locked", 409);
-  if (isEpisodeLockDue(episode)) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (episode.lockedAt !== null) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (isEpisodeLockDue(episode) || isEpisodeLockMalformed(episode)) {
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
+  }
   if (session.kind === "raise") {
     return applyPaidRaise(db, {
       episodeId: session.episodeId,
@@ -1479,6 +1485,23 @@ export function settleVerifiedWaffoOrder(
     } catch (error) {
       db.exec("ROLLBACK TO SAVEPOINT waffo_settlement_apply");
       db.exec("RELEASE SAVEPOINT waffo_settlement_apply");
+      // A payment captured before a deadline must not claim the old board.
+      // The savepoint above intentionally rolls back the attempted listing;
+      // retire the due/corrupt episode only after that rollback, so the
+      // quarantine and replacement board remain part of the outer immediate
+      // settlement transaction.
+      if (error instanceof CheckoutError && error.code === "episode_locked") {
+        const boundaryEpisode = getEpisode(db, intent.episode_id);
+        if (
+          boundaryEpisode &&
+          boundaryEpisode.lockedAt === null &&
+          (isEpisodeLockDue(boundaryEpisode) || isEpisodeLockMalformed(boundaryEpisode))
+        ) {
+          const boundaryNow = new Date();
+          retireEpisodeIfNeededWithinTransaction(db, boundaryEpisode.id, boundaryNow);
+          ensureCurrentOpenEpisodeWithinTransaction(db, {}, boundaryNow);
+        }
+      }
       const reason = error instanceof Error ? error.message : "ranking application failed";
       updateIntentReconciliation(db, intent, reason);
       recordWebhookAttempt(db, {
@@ -1549,6 +1572,16 @@ export async function completePaidCheckout(
   if (!intent) throw new CheckoutError("unknown_checkout", "checkout not found", 404);
   if (intent.mode !== "fixture") {
     throw new CheckoutError("webhook_only", "live Waffo checkout completes via webhook only", 409);
+  }
+  const episode = getEpisode(db, intent.episode_id);
+  if (!episode) throw new CheckoutError("episode_not_found", "episode not found", 404);
+  if (episode.lockedAt !== null) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (isEpisodeLockDue(episode) || isEpisodeLockMalformed(episode)) {
+    // Do not even complete the local fixture session when the schedule is
+    // corrupt or has crossed its deadline. The same request-boundary close
+    // opens the replacement before rejecting the stale checkout.
+    rolloverEpisodeIfDue(db, episode.id);
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
   }
   const session = waffo.getCheckout(checkoutId);
   if (session && session.status !== "paid") {

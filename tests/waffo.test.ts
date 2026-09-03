@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../src/app.js";
 import { migrate, openDatabase } from "../src/db.js";
-import { createEpisode } from "../src/episodes.js";
+import { countEpisodes, createEpisode, getCurrentEpisode, getEpisode } from "../src/episodes.js";
 import {
+  CheckoutError,
   completePaidCheckout,
   createWaffoPort,
   quoteCheckout,
@@ -18,7 +19,7 @@ import { insertListing, listListingsForEpisode } from "../src/listings.js";
 import { lockEpisode } from "../src/veto.js";
 import { FixtureWaffo } from "../src/waffo/fixture.js";
 import { LiveWaffo, readWaffoConfig } from "../src/waffo/live.js";
-import { centsToDisplayString, parseDisplayCents } from "../src/waffo/port.js";
+import { centsToDisplayString, parseDisplayCents, type WaffoPort } from "../src/waffo/port.js";
 import { LivePolar } from "../src/polar/live.js";
 
 const MERCHANT_ID = "MER_1234567890123456789012";
@@ -65,6 +66,23 @@ function bodyForIntent(episodeId = "ep_12") {
     siteUrl: "https://example.com/ada?utm_source=guest-seat",
     oneLiner: "Analytical engines for everyone.",
     bidUsd: 12,
+  };
+}
+
+function countingFixturePort(calls: { value: number }): WaffoPort {
+  const fixture = new FixtureWaffo();
+  return {
+    kind: fixture.kind,
+    mode: fixture.mode,
+    storeId: fixture.storeId,
+    productId: fixture.productId,
+    createCheckout: async (input) => {
+      calls.value += 1;
+      return fixture.createCheckout(input);
+    },
+    getCheckout: (checkoutId) => fixture.getCheckout(checkoutId),
+    completeCheckout: (checkoutId) => fixture.completeCheckout(checkoutId),
+    verifyWebhook: (rawBody, signature) => fixture.verifyWebhook(rawBody, signature),
   };
 }
 
@@ -191,6 +209,50 @@ async function startLive(captured: Captured) {
   const started = await startCheckout(db, port, bodyForIntent());
   return { db, port, started };
 }
+
+test("malformed locksAt quarantines before Waffo and creates no intent", async () => {
+  const db = memoryDb();
+  const corrupt = createEpisode(db, {
+    id: "ep_malformed_locks_at",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    locksAt: "not-a-timestamp",
+  });
+  const calls = { value: 0 };
+  const app = await buildApp({ db, waffo: countingFixturePort(calls) });
+  after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: { accept: "application/json" },
+    payload: bodyForIntent(corrupt.id),
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), { error: "episode_locked" });
+  assert.equal(calls.value, 0);
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS n FROM checkout_intents").get() as { n: number }).n,
+    0,
+  );
+  const quarantined = getEpisode(db, corrupt.id);
+  assert.ok(quarantined?.lockedAt);
+  assert.equal(quarantined?.locksAt, "not-a-timestamp");
+  const current = getCurrentEpisode(db);
+  assert.ok(current);
+  assert.notEqual(current.id, corrupt.id);
+  assert.equal(current.label, "Episode 13");
+  assert.equal(current.lockedAt, null);
+  assert.deepEqual(listListingsForEpisode(db, current.id), []);
+  assert.equal(countEpisodes(db), 2);
+  assert.throws(
+    () => quoteCheckout(db, bodyForIntent(corrupt.id)),
+    (error: unknown) => error instanceof CheckoutError && error.code === "episode_locked",
+  );
+});
 
 test("Waffo mode truth table is explicit and Waffo variables are inert", () => {
   assert.equal(createWaffoPort({ WAFFO_MODE: "fixture", POLAR_LIVE: "1" }).kind, "fixture");

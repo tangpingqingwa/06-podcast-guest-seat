@@ -5,6 +5,7 @@ import {
   getEpisode,
   getLatestLockedEpisode,
   isEpisodeLockDue,
+  isEpisodeLockMalformed,
   nextEpisodeLabel,
   rolloverEpisodeIfDue,
   type Episode,
@@ -946,9 +947,19 @@ function renderDeskHeading(
 function renderHostOpenDesk(input: {
   nextLabel: string;
   lockedEpisode?: Episode;
+  replacementEpisode?: Episode;
 }): string {
   const next = escapeHtml(input.nextLabel);
   const locked = input.lockedEpisode;
+  const replacement = input.replacementEpisode;
+  if (locked && replacement) {
+    return `<section class="archive-current-status" data-archive-current>
+  <p class="empty-kicker">Episode archive</p>
+  <p class="empty-lead">${escapeHtml(locked.label)} is archived.</p>
+  <p class="host-open-note">A fresh board is already open for new claims. Prior bids stay with the archive.</p>
+  <p><a href="/" data-current-board>View the current rundown</a></p>
+</section>`;
+  }
   const kicker = locked ? "Next episode" : "Host desk";
   const lead = locked
     ? `${escapeHtml(locked.label)} is locked. Open ${next} empty.`
@@ -1032,13 +1043,19 @@ export function renderBoardHtml(
   priorLocked?: Episode,
   contextMode: ContextMode = "current",
   perEpisodeHref: string = EPISODE_INDEX_PATH,
+  replacementEpisode?: Episode,
 ): string {
   const context: ContextState = {
     mode: contextMode,
     currentHref: BOARD_PATH,
     perEpisodeHref,
   };
-  const canCharge = Boolean(episode && episode.lockedAt === null);
+  const canCharge = Boolean(
+    episode &&
+      episode.lockedAt === null &&
+      !isEpisodeLockDue(episode, now) &&
+      !isEpisodeLockMalformed(episode),
+  );
   const rows = episode
     ? boardRows(listings, canCharge ? now : undefined)
     : [];
@@ -1089,7 +1106,7 @@ export function renderBoardHtml(
     liveListings: occupiedLive ? liveListingRefs(rows) : undefined,
       });
   const desk = !canCharge
-    ? renderHostOpenDesk({ nextLabel, lockedEpisode })
+    ? renderHostOpenDesk({ nextLabel, lockedEpisode, replacementEpisode })
     : episode && occupiedLive
       ? renderHostLockDesk(episode, booked)
       : "";
@@ -1785,7 +1802,10 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get(EPISODE_INDEX_PATH, async (_request, reply) => {
-    const current = getCurrentEpisode(app.db);
+    let current = getCurrentEpisode(app.db);
+    if (current && (isEpisodeLockDue(current) || isEpisodeLockMalformed(current))) {
+      current = ensureCurrentOpenEpisode(app.db);
+    }
     const episode = current
       ? getLatestLockedEpisode(app.db, current.id)
       : getLatestLockedEpisode(app.db);
@@ -1795,6 +1815,9 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
         .send(renderEpisodeHistoryEmptyHtml());
     }
     const listings = paidListings(listListingsForEpisode(app.db, episode.id));
+    const replacementEpisode = current && current.id !== episode.id && current.lockedAt === null
+      ? current
+      : undefined;
     return reply
       .type("text/html; charset=utf-8")
       .send(
@@ -1807,6 +1830,7 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
           undefined,
           "episode",
           episodePath(episode.id),
+          replacementEpisode,
         ),
       );
   });
@@ -1824,8 +1848,15 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
           }),
         );
       }
-      if (isEpisodeLockDue(episode)) {
-        episode = rolloverEpisodeIfDue(app.db, episode.id).episode;
+      // A direct public episode URL is also a lifecycle boundary. First
+      // converge the latest board, then handle an older due/corrupt target so
+      // this page can never keep a chargeable stale schedule alive.
+      ensureCurrentOpenEpisode(app.db);
+      let replacementEpisode: Episode | undefined;
+      if (isEpisodeLockDue(episode) || isEpisodeLockMalformed(episode)) {
+        const rolled = rolloverEpisodeIfDue(app.db, episode.id);
+        episode = rolled.episode;
+        replacementEpisode = rolled.current.id === episode?.id ? undefined : rolled.current;
         if (!episode) {
           return reply.code(404).type("text/html; charset=utf-8").send(
             renderLayout({
@@ -1834,6 +1865,12 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
               body: `<h1>Episode not found</h1><p class="empty">No board for that id.</p>`,
             }),
           );
+        }
+      }
+      if (!replacementEpisode && episode.lockedAt !== null) {
+        const current = getCurrentEpisode(app.db);
+        if (current && current.id !== episode.id && current.lockedAt === null) {
+          replacementEpisode = current;
         }
       }
       const listings = paidListings(
@@ -1855,6 +1892,7 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
             priorLocked,
             "episode",
             episodePath(episode.id),
+            replacementEpisode,
           ),
         );
     },

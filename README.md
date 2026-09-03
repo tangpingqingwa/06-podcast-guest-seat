@@ -5,7 +5,8 @@ Pay-to-rank auction for the next podcast **guest seat** or **60-second open**. R
 The public `/` rundown opens one empty guest-seat episode automatically when
 needed. After a host lock—or when `locksAt` has passed—the next public visit
 rolls forward to one fresh empty board. Opening never creates a paid listing;
-only a confirmed Waffo checkout claims rank.
+only a confirmed Waffo checkout claims rank. A malformed non-empty `locksAt` is
+quarantined and rolled forward the same way; it can never start a charge.
 
 - Product contract: [SPEC.md](./SPEC.md)
 - How we build: [BUILD.md](./BUILD.md)

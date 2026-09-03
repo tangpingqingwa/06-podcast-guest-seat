@@ -141,6 +141,8 @@ if [[ -f package.json ]]; then
     || fail "src/episodes.ts missing idempotent public episode opening"
   grep -q 'isEpisodeLockDue' src/episodes.ts \
     || fail "src/episodes.ts missing locksAt expiry boundary"
+  grep -q 'isEpisodeLockMalformed' src/episodes.ts \
+    || fail "src/episodes.ts missing fail-closed malformed locksAt boundary"
   grep -q 'oneLiner' src/listings.ts || fail "src/listings.ts missing oneLiner"
   grep -q 'siteUrl' src/listings.ts || fail "src/listings.ts missing siteUrl"
   if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
@@ -265,6 +267,8 @@ if [[ -f package.json ]]; then
     || fail "host open CSS missing compact action state"
   grep -F -q 'data-host-action="lock"' src/http/routes/pages.ts \
     || fail "host lock desk missing compact action state"
+  grep -q 'data-archive-current' src/http/routes/pages.ts \
+    || fail "rolled archive missing current-rundown status"
   grep -q 'livePaidListings' src/rank.ts \
     || fail "rank engine missing livePaidListings rolling-week occupancy"
   grep -q 'bidInRollingWeek' src/rank.ts \
@@ -490,6 +494,7 @@ ensureCurrentOpenEpisode opens the next empty board after a host lock
 ensureCurrentOpenEpisode serializes a cold-database open across SQLite connections
 ensureCurrentOpenEpisode atomically rolls an episode past locksAt
 scheduled rollover serializes one replacement board across SQLite connections
+malformed locksAt quarantine serializes one replacement across SQLite connections
 first bid $5 on empty guest-seat episode is rank #1 after payment
 bid $4 is rejected (min $5)
 two listings, $10 then $12
@@ -510,6 +515,8 @@ POST /host/open from the desk opens a guest-seat episode
 GET / after a lock opens the next board while the old episode stays archived
 GET / rolls an expired locksAt into one empty claim board
 POST /checkout rolls an expired locksAt before refusing the old episode
+GET / quarantines malformed locksAt and opens one usable replacement
+malformed locksAt quarantines before Waffo and creates no intent
 GET / after the host opens N+1 makes bidding that empty seat live
 GET / on a fresh-open empty episode makes bidding the guest seat live
 GET / on a fresh-open empty episode stays empty-honest

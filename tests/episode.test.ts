@@ -14,6 +14,7 @@ import {
   getEpisode,
   getLatestLockedEpisode,
   isEpisodeLockDue,
+  isEpisodeLockMalformed,
   nextEpisodeLabel,
   openNextEpisode,
 } from "../src/episodes.js";
@@ -232,6 +233,38 @@ test("scheduled rollover serializes one replacement board across SQLite connecti
     assert.equal(countEpisodes(secondDb), 2);
     assert.deepEqual(listListingsForEpisode(secondDb, second.id), []);
     assert.equal(getEpisode(secondDb, "ep_scheduled_concurrent")?.lockedAt, "2000-01-01T00:00:00.000Z");
+  } finally {
+    firstDb.close();
+    secondDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("malformed locksAt quarantine serializes one replacement across SQLite connections", () => {
+  const directory = mkdtempSync(join(tmpdir(), "podcast-guest-seat-malformed-lock-"));
+  const databasePath = join(directory, "guest-seat.sqlite");
+  const firstDb = openDatabase(databasePath);
+  const secondDb = openDatabase(databasePath);
+  try {
+    const corrupt = createEpisode(firstDb, {
+      id: "ep_malformed_concurrent",
+      showId: "show_english",
+      label: "Episode 12",
+      seatKind: "guest_seat",
+      opensAt: "2026-08-22T00:00:00.000Z",
+      locksAt: "not-a-timestamp",
+    });
+    assert.equal(isEpisodeLockMalformed(corrupt), true);
+    const first = ensureCurrentOpenEpisode(firstDb);
+    const second = ensureCurrentOpenEpisode(secondDb);
+
+    assert.equal(second.id, first.id);
+    assert.equal(first.label, "Episode 13");
+    assert.equal(first.lockedAt, null);
+    assert.equal(countEpisodes(firstDb), 2);
+    assert.equal(countEpisodes(secondDb), 2);
+    assert.ok(getEpisode(secondDb, corrupt.id)?.lockedAt);
+    assert.deepEqual(listListingsForEpisode(secondDb, second.id), []);
   } finally {
     firstDb.close();
     secondDb.close();

@@ -176,15 +176,50 @@ export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
 const EPISODE_COLUMNS = `id, show_id, label, seat_kind, veto_enabled, opens_at, locks_at, locked_at`;
 
 /**
- * A scheduled lock is due at its exact ISO timestamp. Invalid or missing
- * timestamps are left to the host/manual lock path rather than guessing.
+ * Parse only an RFC3339-style timestamp. `Date.parse` accepts ambiguous
+ * strings such as `0` and normalizes impossible calendar dates, which is not
+ * safe for a value that gates a payment boundary. Missing and malformed
+ * schedules are intentionally represented differently by the callers below.
  */
-export function isEpisodeLockDue(episode: Episode, now: Date = new Date()): boolean {
-  if (episode.lockedAt !== null || !episode.locksAt?.trim()) {
-    return false;
+function parseLocksAt(value: string | null): number | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const [, year, month, day, hour, minute, second, fraction = "", zone] = match;
+  const offsetHours = zone === "Z" ? 0 : Number(zone!.slice(1, 3));
+  const offsetMinutes = zone === "Z" ? 0 : Number(zone!.slice(4, 6));
+  if (
+    Number(month) < 1 || Number(month) > 12 ||
+    Number(day) < 1 || Number(day) > 31 ||
+    Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59 ||
+    offsetHours > 23 || offsetMinutes > 59
+  ) {
+    return undefined;
   }
-  const locksAt = Date.parse(episode.locksAt);
-  return Number.isFinite(locksAt) && locksAt <= now.getTime();
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) return undefined;
+  const localTimestamp = timestamp + (
+    zone === "Z" ? 0 : (zone!.startsWith("+") ? 1 : -1) *
+      (offsetHours * 60 + offsetMinutes) * 60_000
+  );
+  const milliseconds = fraction.slice(0, 3).padEnd(3, "0");
+  const expected = `${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}Z`;
+  return new Date(localTimestamp).toISOString() === expected ? timestamp : undefined;
+}
+
+/** An unlocked episode has a corrupt non-empty schedule that must fail closed. */
+export function isEpisodeLockMalformed(episode: Episode): boolean {
+  return episode.lockedAt === null &&
+    Boolean(episode.locksAt?.trim()) &&
+    parseLocksAt(episode.locksAt) === undefined;
+}
+
+/** A scheduled lock is due at its exact timestamp. Malformed values are not due. */
+export function isEpisodeLockDue(episode: Episode, now: Date = new Date()): boolean {
+  if (episode.lockedAt !== null) return false;
+  const locksAt = parseLocksAt(episode.locksAt);
+  return locksAt !== undefined && locksAt <= now.getTime();
 }
 
 function getLatestUnlockedEpisode(db: AppDb): Episode | undefined {
@@ -199,16 +234,24 @@ function getLatestUnlockedEpisode(db: AppDb): Episode | undefined {
   return row ? mapEpisode(row) : undefined;
 }
 
-function expireEpisodeIfDueWithinTransaction(
+export function retireEpisodeIfNeededWithinTransaction(
   db: AppDb,
   episodeId: string,
   now: Date,
 ): Episode | undefined {
   const episode = getEpisode(db, episodeId);
-  if (!episode || !isEpisodeLockDue(episode, now)) {
+  if (
+    !episode ||
+    episode.lockedAt !== null ||
+    (!isEpisodeLockDue(episode, now) && !isEpisodeLockMalformed(episode))
+  ) {
     return episode;
   }
-  const lockedAt = episode.locksAt?.trim() || now.toISOString();
+  // Preserve a valid deadline for auditability. A corrupt schedule cannot be
+  // copied into `locked_at`; quarantine it with the observed transaction time.
+  const lockedAt = isEpisodeLockMalformed(episode)
+    ? now.toISOString()
+    : episode.locksAt?.trim() || now.toISOString();
   const updated = db
     .prepare(
       `UPDATE episodes SET locked_at = ?
@@ -216,18 +259,18 @@ function expireEpisodeIfDueWithinTransaction(
     )
     .run(lockedAt, episode.id);
   if (updated.changes !== 1) {
-    throw new Error("episode expiry did not update");
+    throw new Error("episode retirement did not update");
   }
   return getEpisode(db, episode.id);
 }
 
 /**
  * Transaction-internal form used by public GET and checkout boundaries. The
- * caller must already hold an immediate transaction. It closes every due
- * latest unlocked episode, then returns the existing open board or inserts
- * one empty guest-seat board. Keeping this operation synchronous and local to
- * SQLite makes a cold start and a scheduled rollover idempotent across
- * multiple application connections.
+ * caller must already hold an immediate transaction. It closes every due or
+ * malformed latest unlocked episode, then returns the existing open board or
+ * inserts one empty guest-seat board. Keeping this operation synchronous and
+ * local to SQLite makes a cold start and a scheduled rollover idempotent
+ * across multiple application connections.
  */
 export function ensureCurrentOpenEpisodeWithinTransaction(
   db: AppDb,
@@ -243,10 +286,10 @@ export function ensureCurrentOpenEpisodeWithinTransaction(
     if (!current) {
       break;
     }
-    if (!isEpisodeLockDue(current, now)) {
+    if (!isEpisodeLockDue(current, now) && !isEpisodeLockMalformed(current)) {
       return current;
     }
-    expireEpisodeIfDueWithinTransaction(db, current.id, now);
+    retireEpisodeIfNeededWithinTransaction(db, current.id, now);
   }
 
   const seatKind = input.seatKind ?? "guest_seat";
@@ -262,9 +305,10 @@ export function ensureCurrentOpenEpisodeWithinTransaction(
 }
 
 /**
- * Close one scheduled episode if its deadline has passed, then ensure there
- * is an open board. This is useful for direct episode URLs and checkout
- * requests that arrive at the deadline instead of through `/` first.
+ * Close one scheduled episode if its deadline has passed (or quarantine its
+ * malformed schedule), then ensure there is an open board. This is useful for
+ * direct episode URLs and checkout requests that arrive at the boundary
+ * instead of through `/` first.
  */
 export function rolloverEpisodeIfDue(
   db: AppDb,
@@ -273,7 +317,7 @@ export function rolloverEpisodeIfDue(
   return db
     .transaction(() => {
       const now = new Date();
-      expireEpisodeIfDueWithinTransaction(db, episodeId, now);
+      retireEpisodeIfNeededWithinTransaction(db, episodeId, now);
       const current = ensureCurrentOpenEpisodeWithinTransaction(db, {}, now);
       return { episode: getEpisode(db, episodeId), current };
     })

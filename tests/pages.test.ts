@@ -385,6 +385,50 @@ test("GET / rolls an expired locksAt into one empty claim board", async () => {
   assert.match(archive.body, /Episode 12 is locked/);
   assert.match(archive.body, /Prior Guest/);
   assert.match(studioMarkup(archive.body), /data-checkout-state="locked"/);
+  assert.match(archive.body, /A fresh board is already open for new claims/);
+  assert.match(archive.body, /data-archive-current/);
+  assert.match(archive.body, /href="\/" data-current-board/);
+  assert.doesNotMatch(archive.body, /action="\/host\/open"|data-open-next/);
+
+  const history = await app.inject({ method: "GET", url: "/e" });
+  assert.equal(history.statusCode, 200);
+  assert.match(history.body, /data-archive-current/);
+  assert.doesNotMatch(history.body, /action="\/host\/open"|data-open-next/);
+});
+
+test("GET / quarantines malformed locksAt and opens one usable replacement", async () => {
+  const db = memoryDb();
+  const corrupt = createEpisode(db, {
+    id: "ep_malformed_public_get",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    locksAt: "not-a-timestamp",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+
+  const first = await app.inject({ method: "GET", url: "/" });
+  assert.equal(first.statusCode, 200);
+  const current = getCurrentEpisode(db);
+  assert.ok(current);
+  assert.notEqual(current.id, corrupt.id);
+  assert.equal(current.label, "Episode 13");
+  assert.equal(current.lockedAt, null);
+  assert.ok(getEpisode(db, corrupt.id)?.lockedAt);
+  assert.equal(countEpisodes(db), 2);
+  assert.deepEqual(listListingsForEpisode(db, current.id), []);
+  assert.match(first.body, /Episode 13 is open/);
+  assert.match(first.body, /Claim #1 for/);
+  assert.doesNotMatch(studioMarkup(first.body), /data-claim-locked|action="\/host\/open"/);
+
+  const archive = await app.inject({ method: "GET", url: `/e/${corrupt.id}` });
+  assert.equal(archive.statusCode, 200);
+  assert.match(archive.body, /Episode 12 is locked/);
+  assert.match(archive.body, /A fresh board is already open for new claims/);
+  assert.doesNotMatch(archive.body, /action="\/host\/open"|data-open-next/);
+  assert.equal(countEpisodes(db), 2);
 });
 
 test("POST /checkout rolls an expired locksAt before refusing the old episode", async () => {
