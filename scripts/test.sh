@@ -137,6 +137,10 @@ if [[ -f package.json ]]; then
   grep -q 'sixty_second_open' src/episodes.ts \
     || fail "src/episodes.ts missing sixty_second_open"
   grep -q 'vetoEnabled' src/episodes.ts || fail "src/episodes.ts missing vetoEnabled"
+  grep -q 'ensureCurrentOpenEpisode' src/episodes.ts \
+    || fail "src/episodes.ts missing idempotent public episode opening"
+  grep -q 'isEpisodeLockDue' src/episodes.ts \
+    || fail "src/episodes.ts missing locksAt expiry boundary"
   grep -q 'oneLiner' src/listings.ts || fail "src/listings.ts missing oneLiner"
   grep -q 'siteUrl' src/listings.ts || fail "src/listings.ts missing siteUrl"
   if grep -RInE 'https?://([^/]*\.)?polar\.sh' src tests >/dev/null 2>&1; then
@@ -481,6 +485,11 @@ GET /healthz returns 200 { ok: true }
 new episode does not carry old bids
 guest-seat episode defaults vetoEnabled to true
 60-second episode defaults vetoEnabled to false
+ensureCurrentOpenEpisode opens one empty board
+ensureCurrentOpenEpisode opens the next empty board after a host lock
+ensureCurrentOpenEpisode serializes a cold-database open across SQLite connections
+ensureCurrentOpenEpisode atomically rolls an episode past locksAt
+scheduled rollover serializes one replacement board across SQLite connections
 first bid $5 on empty guest-seat episode is rank #1 after payment
 bid $4 is rejected (min $5)
 two listings, $10 then $12
@@ -493,12 +502,14 @@ NSFW host is rejected
 public click /go/:id 302 + clicks increment
 GET /about describes the seat
 GET /rules states the public bid, window, and host-review rules
-GET / with no episode keeps the claim visible
-GET / with no episode points first-time guests
-GET / with no episode shows a first-time host desk
-GET / with no episode tells first-time guests to skip the host desk
+GET / with an empty database auto-opens an empty claim board
+GET / auto-opens only once and About explains automatic episode opening
+GET / auto-opening does not expose the host desk or host session
+GET / with no prior episodes gives guests an immediately usable claim
 POST /host/open from the desk opens a guest-seat episode
-GET / after lock still fail-closes checkout 409
+GET / after a lock opens the next board while the old episode stays archived
+GET / rolls an expired locksAt into one empty claim board
+POST /checkout rolls an expired locksAt before refusing the old episode
 GET / after the host opens N+1 makes bidding that empty seat live
 GET / on a fresh-open empty episode makes bidding the guest seat live
 GET / on a fresh-open empty episode stays empty-honest

@@ -61,10 +61,10 @@ Cadence is **per episode**, not a forever board.
 
 Occupied live `/` ranks Waffo-paid `paidAt` in the **rolling last 7 days**. Not a civil-midnight lock. Not Monday 00:00 UTC. Not a 24h lock on #1. Host lock still freezes the episode. Paid rows older than 7 days stay stored; they do not occupy the live rundown.
 
-1. A show opens episode `N` (guest seat or 60-second open).
-2. Bids land on that episode’s board until the host **locks** it (or the documented lock time).
+1. The first public visit to `/` opens episode `N` as a new empty guest-seat board when no episode is unlocked. This lazy open is idempotent, creates no listing, and does not call Waffo.
+2. Bids land on that episode’s board until the host **locks** it or its documented `locksAt` is reached. At the deadline, a public `/`, episode page, or checkout boundary atomically closes the episode; the current-board boundary also opens `N+1`.
 3. After lock, the booked listing is the highest remaining eligible bid (see veto).
-4. Episode `N+1` opens as a new empty board. Prior bids do not carry.
+4. Episode `N+1` opens as a new empty board. Prior bids do not carry. A host may still choose the seat kind when opening an episode manually through the host desk.
 
 v1 architecture is multi-show. A documented v1 lane may be a single English-language show; do not hard-code one show into the rank engine.
 
@@ -186,6 +186,11 @@ provide live credentials.
 
 A listing is not ranked until payment completes. Abandoned checkout = no row (or an unpaid draft that is not public — v1: no public unpaid rows).
 
+An episode whose `locksAt` has passed is not eligible for a new checkout or
+claim, even if no scheduler has visited the process. The request that observes
+the deadline performs the close and replacement-board write in one immediate
+SQLite transaction, so concurrent visitors converge on one empty next board.
+
 ---
 
 ## 9. URL hygiene
@@ -234,6 +239,8 @@ Clicks go to the cleaned URL only.
 | 15 | Public click | `/go/:id` 302 + clicks increment |
 | 16 | Waffo fixture | Checkout without network claims rank |
 | 17 | Live mode absent in test | No live Waffo host |
+| 18 | Empty database or post-lock public `/` | Opens one empty guest-seat board; repeat visits do not duplicate it |
+| 19 | `locksAt` reached before `/` or checkout | Closes the old episode, opens one empty next board, and rejects the old checkout |
 
 ---
 

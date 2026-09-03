@@ -35,7 +35,7 @@ Browser
         │
         ▼
      Fastify
-        ├─ listings / episodes
+        ├─ listings / episodes (lazy-open + `locksAt` rollover in SQLite)
         ├─ rank.ts          bidUsd desc, firstBidAt asc on ties
         ├─ hygiene.ts       strip tracking, reject chat/NSFW
         ├─ veto.ts          flag + public reason
@@ -157,9 +157,9 @@ type WaffoPort = {
 | `rank.test.ts` | min $5; $10 vs $12; older wins ties; raise = difference; other bidder cannot pay only the difference |
 | `hygiene.test.ts` | UTM stripped; Discord/Telegram rejected; NSFW rejected; `/go` has no query |
 | `veto.test.ts` | guest_seat default on; sixty_second_open default off; veto drops #1; flag off → reject veto |
-| `episode.test.ts` | new episode empty; old bids do not carry |
+| `episode.test.ts` | new episode empty; old bids do not carry; lazy-open idempotency, `locksAt` rollover, and cross-connection SQLite serialization |
 | `waffo.test.ts` | explicit fixture mode, immutable intent/decimal checkout params, signed webhook settlement, exact replay/reconciliation, return non-settlement, and stale-raise safety; no live host |
-| `pages.test.ts` | `/` board; `/about`; `/rules`; public clicks; occupied live rolling last-7-days window |
+| `pages.test.ts` | `/` board; `/about`; `/rules`; public clicks; empty/post-lock lazy opening; `locksAt` rollover at GET/checkout; occupied live rolling last-7-days window |
 | `window.test.ts` | rolling last 7 days is 7×24h; Monday 00:00 UTC does not drop an in-window bid |
 | `scripts/test.sh` | contract checks **plus** `tsc` + `node:test` once `package.json` exists |
 
@@ -212,6 +212,15 @@ Each PR is independently mergeable. Dependencies are hard.
 - **Files:** `src/veto.ts`, `src/http/routes/host.ts`, `tests/veto.test.ts`
 - **Dependencies:** PR 5
 - **Acceptance:** SPEC 10–13. Vetoed row remains visible. Flag frozen after first paid bid.
+
+### Lifecycle note
+
+The public board is also the small lifecycle trigger: `ensureCurrentOpenEpisode`
+uses one SQLite `BEGIN IMMEDIATE` transaction to open a missing board and to
+roll a due `locksAt` forward. There is no scheduler, paid listing, or payment
+provider call in this path. Host lock/veto and `/e/:episodeId` archive views
+remain authoritative, while a due checkout is rejected before an intent can
+reach Waffo.
 
 ### PR 7: Dockerfile + one-VPS runbook
 

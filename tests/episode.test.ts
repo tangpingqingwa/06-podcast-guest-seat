@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
 import { after, test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openDatabase } from "../src/db.js";
 import {
+  countEpisodes,
   createEpisode,
   defaultVetoEnabled,
   EpisodeError,
+  ensureCurrentOpenEpisode,
   getCurrentEpisode,
   getEpisode,
   getLatestLockedEpisode,
+  isEpisodeLockDue,
   nextEpisodeLabel,
   openNextEpisode,
 } from "../src/episodes.js";
@@ -110,6 +116,127 @@ test("openNextEpisode refuses a second unlocked episode", () => {
     () => openNextEpisode(db, { label: "Episode 2" }),
     (err: unknown) => err instanceof EpisodeError && err.code === "episode_already_open",
   );
+});
+
+test("ensureCurrentOpenEpisode opens one empty board and is idempotent", () => {
+  const db = memoryDb();
+  const first = ensureCurrentOpenEpisode(db, {
+    opensAt: "2026-08-23T00:00:00.000Z",
+  });
+  const again = ensureCurrentOpenEpisode(db, {
+    opensAt: "2026-08-24T00:00:00.000Z",
+  });
+
+  assert.equal(first.label, "Episode 1");
+  assert.equal(first.seatKind, "guest_seat");
+  assert.equal(first.vetoEnabled, true);
+  assert.equal(first.lockedAt, null);
+  assert.deepEqual(again, first);
+  assert.equal(countEpisodes(db), 1);
+  assert.deepEqual(listListingsForEpisode(db, first.id), []);
+});
+
+test("ensureCurrentOpenEpisode opens the next empty board after a host lock", () => {
+  const db = memoryDb();
+  const locked = createEpisode(db, {
+    id: "ep_locked_for_auto_open",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-01T00:00:00.000Z",
+    lockedAt: "2026-08-08T00:00:00.000Z",
+  });
+
+  const next = ensureCurrentOpenEpisode(db, {
+    opensAt: "2026-08-09T00:00:00.000Z",
+  });
+
+  assert.equal(next.label, "Episode 13");
+  assert.equal(next.lockedAt, null);
+  assert.equal(next.vetoEnabled, true);
+  assert.equal(countEpisodes(db), 2);
+  assert.deepEqual(listListingsForEpisode(db, next.id), []);
+  assert.equal(getEpisode(db, locked.id)?.lockedAt, "2026-08-08T00:00:00.000Z");
+});
+
+test("ensureCurrentOpenEpisode serializes a cold-database open across SQLite connections", () => {
+  const directory = mkdtempSync(join(tmpdir(), "podcast-guest-seat-"));
+  const databasePath = join(directory, "guest-seat.sqlite");
+  const firstDb = openDatabase(databasePath);
+  const secondDb = openDatabase(databasePath);
+  try {
+    const first = ensureCurrentOpenEpisode(firstDb, {
+      opensAt: "2026-08-23T00:00:00.000Z",
+    });
+    const second = ensureCurrentOpenEpisode(secondDb, {
+      opensAt: "2026-08-24T00:00:00.000Z",
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(countEpisodes(firstDb), 1);
+    assert.equal(countEpisodes(secondDb), 1);
+    assert.deepEqual(listListingsForEpisode(secondDb, first.id), []);
+  } finally {
+    firstDb.close();
+    secondDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("ensureCurrentOpenEpisode atomically rolls an episode past locksAt", () => {
+  const db = memoryDb();
+  const expiring = createEpisode(db, {
+    id: "ep_scheduled_rollover",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    locksAt: "2000-01-01T00:00:00.000Z",
+  });
+
+  assert.equal(isEpisodeLockDue(expiring, new Date("1999-12-31T23:59:59.999Z")), false);
+  assert.equal(isEpisodeLockDue(expiring, new Date("2000-01-01T00:00:00.000Z")), true);
+  const next = ensureCurrentOpenEpisode(db, {
+    opensAt: "2026-08-27T12:00:00.000Z",
+  });
+
+  assert.equal(next.label, "Episode 13");
+  assert.equal(next.lockedAt, null);
+  assert.equal(getEpisode(db, expiring.id)?.lockedAt, "2000-01-01T00:00:00.000Z");
+  assert.equal(countEpisodes(db), 2);
+  assert.deepEqual(listListingsForEpisode(db, next.id), []);
+  assert.equal(ensureCurrentOpenEpisode(db).id, next.id);
+  assert.equal(countEpisodes(db), 2);
+});
+
+test("scheduled rollover serializes one replacement board across SQLite connections", () => {
+  const directory = mkdtempSync(join(tmpdir(), "podcast-guest-seat-expiry-"));
+  const databasePath = join(directory, "guest-seat.sqlite");
+  const firstDb = openDatabase(databasePath);
+  const secondDb = openDatabase(databasePath);
+  try {
+    createEpisode(firstDb, {
+      id: "ep_scheduled_concurrent",
+      showId: "show_english",
+      label: "Episode 12",
+      seatKind: "guest_seat",
+      opensAt: "2026-08-22T00:00:00.000Z",
+      locksAt: "2000-01-01T00:00:00.000Z",
+    });
+    const first = ensureCurrentOpenEpisode(firstDb);
+    const second = ensureCurrentOpenEpisode(secondDb);
+
+    assert.equal(second.id, first.id);
+    assert.equal(first.label, "Episode 13");
+    assert.equal(countEpisodes(firstDb), 2);
+    assert.equal(countEpisodes(secondDb), 2);
+    assert.deepEqual(listListingsForEpisode(secondDb, second.id), []);
+    assert.equal(getEpisode(secondDb, "ep_scheduled_concurrent")?.lockedAt, "2000-01-01T00:00:00.000Z");
+  } finally {
+    firstDb.close();
+    secondDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("nextEpisodeLabel increments from the latest Episode N", () => {

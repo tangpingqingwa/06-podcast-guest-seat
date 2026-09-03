@@ -1,9 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
+  ensureCurrentOpenEpisode,
   getCurrentEpisode,
   getEpisode,
   getLatestLockedEpisode,
+  isEpisodeLockDue,
   nextEpisodeLabel,
+  rolloverEpisodeIfDue,
   type Episode,
 } from "../../episodes.js";
 import { listListingsForEpisode, siteIdentity, type Listing } from "../../listings.js";
@@ -214,7 +217,7 @@ function renderFunctionRail(): string {
 function renderCueLedger(episode: Episode | undefined): string {
   const seat = episode ? seatLabel(episode.seatKind) : "guest seat";
   const state = !episode
-    ? "Waiting for host"
+    ? "Opening next board"
     : episode.lockedAt === null
       ? "Live board"
       : "Locked archive";
@@ -222,7 +225,7 @@ function renderCueLedger(episode: Episode | undefined): string {
     ? episode.vetoEnabled
       ? "Veto enabled"
       : "Veto off"
-    : "Host opens next";
+    : "Automatic opening";
   return [
     '<section class="cue-ledger" data-cue-ledger aria-label="Episode cue ledger">',
     '  <p class="cue-ledger-kicker">Cue ledger</p>',
@@ -513,9 +516,9 @@ function renderShowTicket(
     return `<aside class="show-ticket" data-show-ticket data-episode-slate data-slot="stats-pill" data-episode-open="false">
   <div class="ticket-main">
     <p class="ticket-kicker">Show ticket</p>
-    <p class="ticket-label">No episode open</p>
+    <p class="ticket-label">Next board opens automatically</p>
     <p class="ticket-seat">guest seat</p>
-    <p class="ticket-veto">The next seat is not for sale yet.</p>
+    <p class="ticket-veto">Visit the rundown to open the next empty seat.</p>
   </div>
   <div class="ticket-stub">
     <p class="stub-state">WAIT</p>
@@ -722,7 +725,7 @@ function renderLockedClaim(episode: Episode): string {
   const label = escapeHtml(episode.label);
   return `<section class="claim" id="claim" data-slot="claim-hero" data-claim-state="locked" data-claim-locked data-checkout-state="locked">
   <h1 class="claim-title" data-slot="claim-heading">${label} is locked</h1>
-  <p class="claim-note">Rank is the bid. This episode is locked and the next episode opens empty.</p>
+  <p class="claim-note">Rank is the bid. This episode is locked; the next visit to the current rundown opens an empty board.</p>
   <p class="form-hint">Bidding is closed for this episode. Prior bids do not carry into the next one.</p>
 </section>`;
 }
@@ -766,7 +769,7 @@ function renderClaim(input: {
     ? `Rank is the bid. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)} <span data-new-guest-claim-note>A new guest pays the full bid. Same site raises. You pay only the difference.</span><span data-raiser-claim-note hidden>${occupiedRaiserNote}</span>${occupiedRaiserGuest}`
     : "";
   const note = !episode
-    ? "Rank is the bid. No episode is open and bidding has not started."
+    ? "Rank is the bid. The next empty episode opens automatically when the rundown is visited."
     : noEligible
       ? `Rank is the bid. ${label} has paid listings, but every one is vetoed. A new bidder may submit a full bid.`
     : nextSeat
@@ -775,7 +778,7 @@ function renderClaim(input: {
         ? `Rank is the bid. The ${seat} is open. $${MIN_BID_USD} takes #1. ${ROLLING_WINDOW_COPY} ${vetoNote(episode)}`
         : occupiedNote;
   const hint = !episode
-    ? "No seat is for sale until the host opens an episode."
+    ? "Refresh the rundown to claim the next empty seat."
     : noEligible
       ? `Enter a new identity and a full bid of at least $${MIN_BID_USD}. Vetoed rows stay visible; they do not become a hidden raise. Unpaid checkout does not rank.`
     : nextSeat
@@ -871,12 +874,11 @@ function renderClaim(input: {
 }
 
 function renderWaitingRundown(): string {
-  return `<section class="empty waiting" data-empty-board data-waiting-on-host>
-  <p class="empty-kicker">No seat for sale</p>
-  <p class="empty-lead">No open episode yet.</p>
-  <p>Skip the host desk. That session form is not a bid.</p>
-  <p>The host opens the next board. Until then this claim is a preview and cannot be purchased.</p>
-  <p class="empty-path"><a href="/about#when-open">When the next episode opens</a></p>
+  return `<section class="empty waiting" data-empty-board data-opening-next>
+  <p class="empty-kicker">Opening the next seat</p>
+  <p class="empty-lead">The next empty episode is being prepared.</p>
+  <p>Visit the current rundown again to bid on the newly opened seat.</p>
+  <p class="empty-path"><a href="/about#when-open">How episode opening works</a></p>
 </section>`;
 }
 
@@ -919,13 +921,13 @@ function renderDeskHeading(
 ): string {
   const paidCount = rows.filter((row) => isPaidListing(row)).length;
   const kicker = !episode
-    ? "Next episode"
+    ? "Opening next episode"
     : canCharge
       ? "Current episode"
       : "Episode archive";
   const title = !episode ? "The desk is waiting" : "On the mic";
   const context = !episode
-    ? "Waiting for the host to open a guest seat."
+    ? "The next empty board opens automatically."
     : seatLabel(episode.seatKind) +
       " · " +
       (paidCount === 0
@@ -1541,8 +1543,8 @@ export function renderAboutHtml(): string {
     body: `<article class="doc">
 <h1>About</h1>
 <p>This is a public auction for the next episode’s <strong>guest seat</strong> or a <strong>60-second open</strong>. People and companies bid whole US dollars. Rank is the bid — nothing else.</p>
-<p id="when-open">The host opens each episode from the current rundown. Until an episode is open, its claim is only a preview and cannot be purchased. When bidding opens, the first confirmed bid of at least $5 takes #1.</p>
-<p>Each episode has its own auction. Paid placements remain eligible for seven days unless the host locks the episode sooner. When an episode is locked, the highest eligible bid is booked and the next episode opens empty.</p>
+<p id="when-open">The current rundown keeps one episode open. If none is unlocked, visiting this page opens the next empty guest-seat board automatically; opening creates no listing or payment. The first confirmed bid of at least $5 takes #1. The host can still choose the seat kind when opening an episode manually from the host desk.</p>
+<p>Each episode has its own auction. Paid placements remain eligible for seven days unless the host locks the episode sooner. When an episode is locked, the highest eligible bid is booked and the next visit to the current rundown opens a new empty episode.</p>
 <p>The host can still say no to a guest-seat placement. Any vetoed row remains visible with a public reason. The 60-second open follows the published highest-bid result.</p>
 <p>Clicks go through this board so the click count is public. Tracking parameters are removed. Chat invites and adult platforms are rejected.</p>
 </article>`,
@@ -1566,6 +1568,7 @@ export function renderRulesHtml(): string {
     <tr><th>Raise</th><td>The same listing may raise. To take #1, the new total must be at least $1 above the current leader. The original payer is charged only the <strong>difference</strong>.</td></tr>
     <tr><th>Identity</th><td>Another bidder cannot steal a listing by paying only that difference. They pay a full new bid.</td></tr>
     <tr><th>Claim</th><td>A completed payment claims the rank. Unpaid checkout does not.</td></tr>
+    <tr><th>Opening</th><td>If no episode is unlocked, the current rundown opens the next empty episode automatically. Opening creates no paid listing; the first confirmed bid of at least $5 claims #1.</td></tr>
     <tr><th>Window</th><td>Paid placements remain eligible for <strong>seven days</strong>. The window follows each placement time rather than resetting at Monday midnight. A host lock still closes the episode.</td></tr>
     <tr><th>Tracking</th><td>Tracking, affiliate, and referral parameters are removed from listing links.</td></tr>
     <tr><th>Shorteners</th><td>Not allowed as the stored URL.</td></tr>
@@ -1752,7 +1755,11 @@ export function renderHostLockErrorHtml(_code: string): string {
 
 export const pageRoutes: FastifyPluginAsync = async (app) => {
   app.get(BOARD_PATH, async (_request, reply) => {
-    const episode = getCurrentEpisode(app.db);
+    // The public current rundown is the entry point for a new episode. Keep
+    // the conditional open inside SQLite's immediate transaction so a cold
+    // database or a post-lock visit cannot strand ordinary bidders behind the
+    // host desk or create duplicate empty episodes.
+    const episode = ensureCurrentOpenEpisode(app.db);
     const listings = episode
       ? paidListings(listListingsForEpisode(app.db, episode.id))
       : [];
@@ -1807,7 +1814,7 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { episodeId: string } }>(
     EPISODE_BOARD_PATH,
     async (request, reply) => {
-      const episode = getEpisode(app.db, request.params.episodeId);
+      let episode = getEpisode(app.db, request.params.episodeId);
       if (!episode) {
         return reply.code(404).type("text/html; charset=utf-8").send(
           renderLayout({
@@ -1816,6 +1823,18 @@ export const pageRoutes: FastifyPluginAsync = async (app) => {
             body: `<h1>Episode not found</h1><p class="empty">No board for that id.</p>`,
           }),
         );
+      }
+      if (isEpisodeLockDue(episode)) {
+        episode = rolloverEpisodeIfDue(app.db, episode.id).episode;
+        if (!episode) {
+          return reply.code(404).type("text/html; charset=utf-8").send(
+            renderLayout({
+              title: "Episode not found · Podcast Guest Seat",
+              path: "/",
+              body: `<h1>Episode not found</h1><p class="empty">No board for that id.</p>`,
+            }),
+          );
+        }
       }
       const listings = paidListings(
         listListingsForEpisode(app.db, episode.id),

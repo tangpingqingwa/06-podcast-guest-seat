@@ -84,7 +84,10 @@ curl -fsS "http://127.0.0.1:${PORT:-3000}/healthz"
 The public board is `/`, `/about`, `/rules`, and `/go/:listingId`. Checkout
 creation is `POST /checkout`. Only a verified Waffo `order.completed` received
 at `POST /webhooks/waffo` can settle a live listing. The browser return URL
-never settles a live payment.
+never settles a live payment. The first public visit opens an empty guest-seat
+board when none is unlocked; a host lock or an elapsed `locksAt` rolls the
+current board to one fresh empty episode on the next request. This is a
+request-boundary SQLite transaction, not a separate scheduler.
 
 ## Waffo test and production setup
 

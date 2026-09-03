@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, mock, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
-import { createEpisode, getCurrentEpisode } from "../src/episodes.js";
+import { countEpisodes, createEpisode, getCurrentEpisode, getEpisode } from "../src/episodes.js";
 import { DEV_HOST_SESSION_SECRET } from "../src/http/routes/host.js";
 import {
   boardRows,
@@ -249,122 +249,213 @@ test("GET /rules states the public bid, window, and host-review rules", async ()
   assert.doesNotMatch(content, /Waffo|outbid\.lol|clone of|\bv1\b|fixture|API keys|paidAt|weekId|BLOCKED-/i);
 });
 
-test("GET / with no episode keeps the claim visible; Waffo cannot charge yet", async () => {
-  const app = await buildApp();
+test("GET / with an empty database auto-opens an empty claim board", async () => {
+  const db = memoryDb();
+  const app = await buildApp({ db });
   after(() => app.close());
   const response = await app.inject({ method: "GET", url: "/" });
   assert.equal(response.statusCode, 200);
   const body = response.body;
-  assert.match(body, /Claim the guest seat for/);
+  const episode = getCurrentEpisode(db);
+  assert.ok(episode);
+  assert.equal(episode.label, "Episode 1");
+  assert.equal(episode.lockedAt, null);
+  assert.deepEqual(listListingsForEpisode(db, episode.id), []);
+  assert.match(body, /Episode 1/);
+  assert.match(body, /Claim #1 for/);
   assert.match(body, /data-bid-step="-1"/);
   assert.match(body, /data-bid-step="1"/);
   assert.match(body, /name="bidUsd"/);
   assert.match(body, /Claim rank/);
-  assert.match(body, /bidding has not started/);
+  assert.match(body, /data-episode-open="true"/);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /name="episodeId" value="[^"]+"/);
   assert.match(body, /data-empty-board/);
-  assert.match(body, /No open episode yet/);
+  assert.match(body, /Seat is open/);
   assert.match(body, /data-show-ticket/);
-  assert.match(body, /data-episode-open="false"/);
   assert.match(body, /Show ticket/);
   assert.match(body, /bid-field/);
-  assert.match(body, /data-waiting-on-host/);
-  assert.match(body, /No seat for sale/);
-  assert.match(body, /The next seat is not for sale/);
-  assert.match(body, /No seat is for sale until the host opens an episode/);
-  assert.match(body, /\/about#when-open/);
+  assert.match(body, /data-empty-honest/);
+  assert.match(body, /data-empty-window/);
+  assert.match(body, /data-empty-claim-window/);
   assert.doesNotMatch(body, /featured guest/i);
   assert.doesNotMatch(body, /play count/i);
   assert.doesNotMatch(body, /followers/i);
-  assert.doesNotMatch(studioMarkup(body), /data-empty-window/);
-  assert.doesNotMatch(studioMarkup(body), /data-empty-claim-window/);
+  assert.doesNotMatch(body, /data-waiting-on-host|No open episode yet|No seat for sale/i);
   assert.doesNotMatch(studioMarkup(body), /data-occupied-window/);
-  assert.doesNotMatch(studioMarkup(body), /Paid placements remain eligible for seven days/);
-  assert.match(body, /disabled/);
+  assert.match(studioMarkup(body), /Paid placements remain eligible for seven days/);
+  assert.doesNotMatch(body, /name="bidUsd"[^>]*disabled/);
+  assert.doesNotMatch(studioMarkup(body), /data-host-open|data-host-only|Skip the host desk/);
 });
 
-test("GET / with no episode points first-time guests at when the next seat opens", async () => {
-  const app = await buildApp();
+test("GET / auto-opens only once and About explains automatic episode opening", async () => {
+  const db = memoryDb();
+  const app = await buildApp({ db });
   after(() => app.close());
-  const board = await app.inject({ method: "GET", url: "/" });
-  assert.equal(board.statusCode, 200);
-  assert.match(board.body, /data-waiting-on-host/);
-  assert.match(board.body, /href="\/about#when-open"/);
-  assert.doesNotMatch(board.body, /Already on this episode\?/);
-  assert.match(board.body, /disabled/);
+  const first = await app.inject({ method: "GET", url: "/" });
+  assert.equal(first.statusCode, 200);
+  const opened = getCurrentEpisode(db);
+  assert.ok(opened);
+  const second = await app.inject({ method: "GET", url: "/" });
+  assert.equal(second.statusCode, 200);
+  assert.equal(getCurrentEpisode(db)?.id, opened.id);
+  assert.equal(listListingsForEpisode(db, opened.id).length, 0);
+  assert.match(second.body, /Episode 1/);
+  assert.match(second.body, /Claim #1 for/);
+  assert.doesNotMatch(second.body, /Already on this episode\?/);
+  assert.doesNotMatch(second.body, /data-waiting-on-host|No seat for sale/i);
 
   const about = await app.inject({ method: "GET", url: "/about" });
   assert.equal(about.statusCode, 200);
   assert.match(about.body, /id="when-open"/);
-  assert.match(about.body, /The host opens each episode/);
-  assert.match(about.body, /preview and cannot be purchased/);
+  assert.match(about.body, /opens the next empty guest-seat board automatically/i);
+  assert.match(about.body, /opening creates no listing or payment/i);
   assert.match(about.body, /first confirmed bid of at least \$5 takes #1/);
 });
 
-test("GET / with no episode shows a first-time host desk to open the next seat", async () => {
+test("GET / auto-opening does not expose the host desk or host session", async () => {
   const app = await buildApp({ hostSessionSecret: DEV_HOST_SESSION_SECRET });
   after(() => app.close());
   const response = await app.inject({ method: "GET", url: "/" });
   assert.equal(response.statusCode, 200);
   const body = response.body;
-  assert.match(body, /data-host-open/);
-  assert.match(body, /data-host-only/);
-  assert.match(body, /data-guest-skip/);
-  assert.match(body, /Guests skip this/);
-  assert.match(body, /Open the next episode so guests can bid/);
-  assert.match(body, /action="\/host\/open"/);
-  assert.match(body, /Open Episode 1/);
-  assert.match(body, /class="open-next"/);
+  assert.match(body, /data-episode-open="true"/);
+  assert.match(body, /Claim #1 for/);
+  assert.match(body, /name="episodeId" value="[^"]+"/);
   const studio = studioMarkup(body);
-  assert.match(studio, /class="studio studio-waiting"/);
-  assert.doesNotMatch(studio, /studio-open-empty/);
-  assert.doesNotMatch(studio, /studio-open-occupied/);
+  assert.doesNotMatch(studio, /data-host-open|data-host-only|data-guest-skip/);
+  assert.doesNotMatch(body, /action="\/host\/open"|class="open-next"/);
+  assert.doesNotMatch(body, new RegExp(DEV_HOST_SESSION_SECRET));
+  assert.match(studio, /class="studio studio-open-empty"/);
+  assert.doesNotMatch(studio, /studio-waiting|studio-open-occupied/);
   assert.equal(countExact(studio, "data-claim-locked"), 0);
   assert.equal(countExact(studio, 'data-checkout-state="locked"'), 0);
-  assert.equal(countExact(studio, "data-empty-honest"), 0);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-later-fact"), 0);
-  assert.match(body, /name="session"/);
-  assert.match(body, /name="seatKind" value="guest_seat"/);
-  assert.match(body, /name="label"[^>]*value="Episode 1"/);
-  assert.match(body, /data-waiting-on-host/);
-  assert.match(body, /Skip the host desk/);
-  assert.match(body, /bidding has not started/);
-  assert.match(body, /disabled/);
-  assert.doesNotMatch(body, /name="episodeId"/);
+  assert.doesNotMatch(body, /name="session"|name="seatKind"|name="label"/);
+  assert.doesNotMatch(body, /data-waiting-on-host|Skip the host desk|bidding has not started/i);
+  assert.doesNotMatch(body, /name="bidUsd"[^>]*disabled/);
 });
 
-test("GET / with no episode tells first-time guests to skip the host desk", async () => {
+test("GET / rolls an expired locksAt into one empty claim board", async () => {
+  const db = memoryDb();
+  const expired = createEpisode(db, {
+    id: "ep_expired_public_get",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    locksAt: "2026-08-27T11:59:59.000Z",
+  });
+  insertListing(db, {
+    id: "lst_expired_public_get",
+    episodeId: expired.id,
+    name: "Prior Guest",
+    siteUrl: "https://prior.example/",
+    oneLiner: "A paid row from the prior board.",
+    bidUsd: 12,
+    firstBidAt: "2026-08-22T01:00:00.000Z",
+    paidAt: "2026-08-22T01:00:05.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+
+  const first = await app.inject({ method: "GET", url: "/" });
+  assert.equal(first.statusCode, 200);
+  const current = getCurrentEpisode(db);
+  assert.ok(current);
+  assert.notEqual(current.id, expired.id);
+  assert.equal(current.label, "Episode 13");
+  assert.equal(current.lockedAt, null);
+  assert.equal(getEpisode(db, expired.id)?.lockedAt, "2026-08-27T11:59:59.000Z");
+  assert.equal(countEpisodes(db), 2);
+  assert.deepEqual(listListingsForEpisode(db, current.id), []);
+  assert.match(first.body, /Episode 13 is open/);
+  assert.match(first.body, /Claim #1 for/);
+  assert.doesNotMatch(first.body, /Prior Guest/);
+
+  const second = await app.inject({ method: "GET", url: "/" });
+  assert.equal(second.statusCode, 200);
+  assert.equal(getCurrentEpisode(db)?.id, current.id);
+  assert.equal(countEpisodes(db), 2);
+  assert.match(second.body, /Claim #1 for/);
+
+  const archive = await app.inject({ method: "GET", url: "/e/ep_expired_public_get" });
+  assert.equal(archive.statusCode, 200);
+  assert.match(archive.body, /Episode 12 is locked/);
+  assert.match(archive.body, /Prior Guest/);
+  assert.match(studioMarkup(archive.body), /data-checkout-state="locked"/);
+});
+
+test("POST /checkout rolls an expired locksAt before refusing the old episode", async () => {
+  const db = memoryDb();
+  const expired = createEpisode(db, {
+    id: "ep_expired_checkout",
+    showId: "show_english",
+    label: "Episode 12",
+    seatKind: "guest_seat",
+    opensAt: "2026-08-22T00:00:00.000Z",
+    locksAt: "2026-08-27T11:59:59.000Z",
+  });
+  const app = await buildApp({ db });
+  after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/checkout",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+    },
+    payload:
+      `episodeId=${expired.id}&name=Late%20Guest&siteUrl=https%3A%2F%2Flate.example%2F&oneLiner=Too%20late.&bidUsd=12`,
+  });
+  assert.equal(response.statusCode, 409);
+  assert.match(response.body, /This episode is locked/);
+  assert.match(response.body, /No charge was started/);
+  assert.equal(getEpisode(db, expired.id)?.lockedAt, "2026-08-27T11:59:59.000Z");
+  const current = getCurrentEpisode(db);
+  assert.ok(current);
+  assert.notEqual(current.id, expired.id);
+  assert.equal(current.label, "Episode 13");
+  assert.deepEqual(listListingsForEpisode(db, current.id), []);
+  assert.equal(countEpisodes(db), 2);
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS n FROM checkout_intents").get() as { n: number }).n,
+    0,
+  );
+});
+
+test("GET / with no prior episodes gives guests an immediately usable claim", async () => {
   const app = await buildApp({ hostSessionSecret: DEV_HOST_SESSION_SECRET });
   after(() => app.close());
   const response = await app.inject({ method: "GET", url: "/" });
   assert.equal(response.statusCode, 200);
   const body = response.body;
-  const waitingAt = body.indexOf("data-waiting-on-host");
-  const deskAt = body.indexOf("data-host-open");
-  const skipAt = body.indexOf("data-guest-skip");
-  const claimAt = body.indexOf('id="claim"');
-  assert.notEqual(waitingAt, -1);
-  assert.notEqual(deskAt, -1);
-  assert.notEqual(skipAt, -1);
-  assert.notEqual(claimAt, -1);
-  assert.match(body, /data-host-only/);
-  assert.match(body, /Guests skip this\. This desk is for the host — it is not a bid\./);
-  assert.match(body, /Skip the host desk\. That session form is not a bid\./);
-  assert.match(body, /Claim the guest seat for/);
-  assert.match(body, /name="bidUsd"[^>]*disabled/);
-  assert.match(body, /class="outbid" disabled/);
-  assert.match(body, /action="\/host\/open"/);
-  assert.match(body, /Open Episode 1/);
-  assert.match(body, /class="open-next"/);
   const studio = studioMarkup(body);
-  assert.match(studio, /class="studio studio-waiting"/);
-  assert.doesNotMatch(studio, /studio-open-empty/);
+  const claimAt = studio.indexOf('id="claim"');
+  const rundownAt = studio.indexOf('data-slot="rundown-stack"');
+  const openSeatAt = studio.indexOf("data-open-seat");
+  const formAt = studio.indexOf('action="/checkout"');
+  assert.notEqual(claimAt, -1);
+  assert.notEqual(rundownAt, -1);
+  assert.notEqual(openSeatAt, -1);
+  assert.notEqual(formAt, -1);
+  assert.ok(claimAt < rundownAt);
+  assert.ok(claimAt < formAt);
+  assert.match(body, /Claim #1 for/);
+  assert.match(body, /data-empty-honest/);
+  assert.match(body, /name="bidUsd"/);
+  assert.match(body, /class="outbid"/);
+  assert.doesNotMatch(body, /data-host-only|data-guest-skip|action="\/host\/open"/);
+  assert.doesNotMatch(body, /No seat is for sale until the host opens an episode/i);
+  assert.doesNotMatch(body, new RegExp(DEV_HOST_SESSION_SECRET));
+  assert.match(studio, /class="studio studio-open-empty"/);
   assert.doesNotMatch(studio, /studio-open-occupied/);
   assert.equal(countExact(studio, "data-claim-locked"), 0);
   assert.equal(countExact(studio, 'data-checkout-state="locked"'), 0);
-  assert.equal(countExact(studio, "data-empty-honest"), 0);
+  assert.equal(countExact(studio, "data-empty-honest"), 3);
   assert.equal(countExact(studio, "data-later-fact"), 0);
-  assert.doesNotMatch(body, /class="open-next outbid"/);
-  assert.doesNotMatch(body, /name="episodeId"/);
   assert.doesNotMatch(body, /Already on this episode\?/);
 });
 
@@ -451,7 +542,7 @@ test("POST /host/open from the desk opens a guest-seat episode so Waffo can char
   assert.deepEqual(again.json(), { error: "episode_already_open" });
 });
 
-test("GET / after lock still fail-closes checkout 409 — vetoed rows stay visible", async () => {
+test("GET / after a lock opens the next board while the old episode stays archived", async () => {
   const db = memoryDb();
   createEpisode(db, {
     id: "ep_lock_409",
@@ -487,65 +578,36 @@ test("GET / after lock still fail-closes checkout 409 — vetoed rows stay visib
   after(() => app.close());
   const board = await app.inject({ method: "GET", url: "/" });
   assert.equal(board.statusCode, 200);
+  const current = getCurrentEpisode(db);
+  assert.ok(current);
+  assert.notEqual(current.id, "ep_lock_409");
+  assert.equal(current.label, "Episode 13");
+  assert.equal(current.lockedAt, null);
+  assert.deepEqual(listListingsForEpisode(db, current.id), []);
   const body = board.body;
   const studio = studioMarkup(body);
-  const claimAt = studio.indexOf('id="claim"');
-  const lock409At = studio.indexOf('data-checkout-state="locked"');
-  const lockCertainAt = studio.indexOf("data-claim-locked");
-  const lockedTitleAt = studio.indexOf("Episode 12 is locked");
-  const ticketAt = studio.indexOf("data-show-ticket");
-  const rundownAt = studio.indexOf("data-rundown");
-  const bookedAt = studio.indexOf("Booked Co");
-  const vetoAt = studio.indexOf("Hard Sell Co");
-  assert.notEqual(claimAt, -1);
-  assert.notEqual(lock409At, -1);
-  assert.notEqual(lockCertainAt, -1);
-  assert.notEqual(lockedTitleAt, -1);
-  assert.notEqual(ticketAt, -1);
-  assert.notEqual(rundownAt, -1);
-  assert.notEqual(bookedAt, -1);
-  assert.notEqual(vetoAt, -1);
-  assert.ok(ticketAt < claimAt);
-  assert.ok(ticketAt < lock409At);
-  assert.ok(ticketAt < lockCertainAt);
-  assert.ok(ticketAt < lockedTitleAt);
-  assert.ok(lockedTitleAt < rundownAt);
-  assert.ok(rundownAt < bookedAt);
-  assert.ok(rundownAt < vetoAt);
-  assert.match(body, /data-checkout-state="locked"/);
-  assert.match(body, /data-claim-locked/);
-  assert.match(body, /data-claim-locked/);
-  assert.match(body, /Episode 12 is locked/);
-  assert.match(body, /This episode is locked/);
-  assert.match(body, /Bidding is closed for this episode/);
-  assert.match(body, /Booked Co/);
-  assert.match(body, /Hard Sell Co/);
-  assert.match(body, /Vetoed: hard sell/);
-  assert.match(body, /data-listing-id="lst_lock_409_veto"[^>]*data-vetoed="true"/);
-  assert.equal(countExact(studio, 'data-checkout-state="locked"'), 1);
-  assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.equal(countExact(studio, "data-claim-locked"), 1);
-  assert.doesNotMatch(studio, /data-guest-prize/);
-  assert.doesNotMatch(studio, /data-later-fact/);
-  assert.doesNotMatch(studio, /data-empty-honest/);
-  assert.match(studio, /class="studio studio-locked"/);
-  assert.doesNotMatch(studio, /studio-open-empty/);
-  assert.doesNotMatch(studio, /data-checkout-state="locked"-first/);
-  assert.doesNotMatch(studio, /data-checkout-state="locked"-six/);
-  assert.doesNotMatch(studio, /data-checkout-state="locked"-after/);
-  assert.doesNotMatch(body, /data-claim-live/);
-  assert.doesNotMatch(body, /data-open-seat/);
-  assert.doesNotMatch(body, /Seat is open/);
-  assert.doesNotMatch(body, /\$5 takes #1/);
-  assert.doesNotMatch(body, /name="bidUsd"/);
-  assert.doesNotMatch(body, /class="outbid"/);
-  assert.doesNotMatch(body, /action="\/checkout"/);
-  assert.doesNotMatch(body, /featured guest/i);
-  const studioCss = body.slice(body.indexOf("<style>"), body.indexOf("</style>"));
-  assert.match(studioCss, /\.claim\[data-claim-state="locked"\]/);
-  assert.match(studioCss, /\.claim\[data-claim-state="locked"\]/);
-  assert.match(studioCss, /\.claim\[data-empty-honest\]/);
-  assert.doesNotMatch(studioCss, /\.studio\.studio-open-occupied \.guest\[data-guest-prize\]\[data-paid-at\] \.guest-name/);
+  assert.match(body, /Episode 13 is open/);
+  assert.match(body, /data-episode-open="true"/);
+  assert.match(body, /data-claim-live/);
+  assert.match(body, /Claim #1 for/);
+  assert.match(body, /data-open-seat/);
+  assert.match(body, /data-empty-honest/);
+  assert.match(body, /\$5 takes #1/);
+  assert.match(body, /name="episodeId" value="[^"]+"/);
+  assert.doesNotMatch(body, /Booked Co|Hard Sell Co|Episode 12 is locked/);
+  assert.doesNotMatch(studio, /data-host-open|data-host-only|data-waiting-on-host/);
+  assert.match(studio, /class="studio studio-open-empty"/);
+  assert.doesNotMatch(studio, /studio-locked|data-claim-locked|data-checkout-state="locked"/);
+
+  const archive = await app.inject({ method: "GET", url: "/e/ep_lock_409" });
+  assert.equal(archive.statusCode, 200);
+  assert.match(archive.body, /Episode 12 is locked/);
+  assert.match(archive.body, /Booked Co/);
+  assert.match(archive.body, /Hard Sell Co/);
+  assert.match(archive.body, /Vetoed: hard sell/);
+  assert.match(archive.body, /data-listing-id="lst_lock_409_veto"[^>]*data-vetoed="true"/);
+  assert.match(studioMarkup(archive.body), /data-checkout-state="locked"/);
+  assert.match(studioMarkup(archive.body), /data-claim-locked/);
 
   const checkout = await app.inject({
     method: "POST",
@@ -2688,7 +2750,7 @@ test("GET / on occupied live keeps one first click — Claim stays after the #1 
     payload: `episodeId=ep_guest_before_claim&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_guest_before_claim" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -2991,7 +3053,7 @@ test("occupied week window is rolling last-7-days — not a civil-midnight lock"
     payload: `episodeId=ep_live_window&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_window" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -3151,7 +3213,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days — not Mond
     payload: `episodeId=ep_empty_rolling_copy&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_empty_rolling_copy" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 1 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -3340,7 +3402,7 @@ test("GET / on a fresh-open empty episode names rolling last-7-days on the claim
     payload: `episodeId=ep_empty_claim_window&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_empty_claim_window" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 1 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -3600,7 +3662,7 @@ test("GET / on occupied live names rolling last-7-days on occupied-claim beside 
     payload: `episodeId=ep_live_claim_window&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_window" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -3879,7 +3941,7 @@ test("GET / on occupied live names the raise difference on occupied-claim beside
     payload: `episodeId=ep_live_claim_raise&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_raise" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -4151,7 +4213,7 @@ test("GET / on occupied live names the Waffo charge as the raise difference on o
     payload: `episodeId=ep_live_claim_raise_amount&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_raise_amount" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -4459,7 +4521,7 @@ test("GET / on occupied live names Waffo's full new bid for a new guest — rais
     payload: `episodeId=ep_live_claim_new_bid&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_new_bid" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -4882,7 +4944,7 @@ test("GET / on occupied live Waffo charge leads with the raise difference when t
     payload: `episodeId=ep_live_claim_raise_lead&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_raise_lead" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -5276,7 +5338,7 @@ test("GET / on occupied live occupied-claim note names the raise difference afte
     payload: `episodeId=ep_live_claim_note_raise&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_note_raise" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -5699,7 +5761,7 @@ test("GET / on occupied live occupied-claim form-hint names the raise difference
     payload: `episodeId=ep_live_claim_form_hint_raise&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_form_hint_raise" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -6116,7 +6178,7 @@ test("GET / on occupied live occupied-claim names the matched guest after the sa
     payload: `episodeId=ep_live_claim_raise_guest&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_raise_guest" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -6501,7 +6563,7 @@ test("GET / on occupied live occupied-claim Outbid names the matched guest after
     payload: `episodeId=ep_live_claim_outbid_guest&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_live_claim_outbid_guest" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -6732,7 +6794,7 @@ test("unpaid stays off the rundown — No #1 guest until Waffo reports paid", as
     payload: `episodeId=ep_unpaid_off&session=${encodeURIComponent(DEV_HOST_SESSION_SECRET)}`,
   });
   assert.equal(locked.statusCode, 303);
-  const afterLock = await app.inject({ method: "GET", url: "/" });
+  const afterLock = await app.inject({ method: "GET", url: "/e/ep_unpaid_off" });
   const lockedStudio = studioMarkup(afterLock.body);
   assert.match(lockedStudio, /Episode 12 is locked/);
   assert.match(lockedStudio, /data-checkout-state="locked"/);
@@ -6897,24 +6959,33 @@ test("POST /host/lock from the desk locks the occupied episode so Waffo cannot c
 
   const board = await app.inject({ method: "GET", url: "/" });
   assert.equal(board.statusCode, 200);
-  assert.match(board.body, /data-episode-open="false"/);
-  assert.match(board.body, /This episode is locked/);
-  assert.match(board.body, /Booked Co/);
-  assert.match(board.body, /data-host-open/);
-  assert.match(board.body, /Open Episode 13/);
-  assert.match(board.body, /data-claim-locked/);
-  assert.match(board.body, /data-claim-locked/);
-  assert.match(board.body, /data-checkout-state="locked"/);
-  assert.match(board.body, /Episode 12 is locked/);
-  assert.doesNotMatch(board.body, /class="outbid"/);
-  assert.doesNotMatch(board.body, /name="bidUsd"/);
-  assert.doesNotMatch(board.body, /action="\/checkout"/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-host-lock/);
-  assert.doesNotMatch(board.body, /action="\/host\/lock"/);
-  assert.doesNotMatch(board.body, /data-claim-live/);
-  assert.doesNotMatch(board.body, /data-open-seat/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-empty-honest/);
-  assert.doesNotMatch(studioMarkup(board.body), /data-later-fact/);
+  const next = getCurrentEpisode(db);
+  assert.ok(next);
+  assert.notEqual(next.id, lockedEpisode.id);
+  assert.equal(next.label, "Episode 13");
+  assert.equal(next.lockedAt, null);
+  assert.deepEqual(listListingsForEpisode(db, next.id), []);
+  assert.match(board.body, /data-episode-open="true"/);
+  assert.match(board.body, /Episode 13 is open/);
+  assert.match(board.body, /Claim #1 for/);
+  assert.match(board.body, /name="bidUsd"/);
+  assert.match(board.body, /action="\/checkout"/);
+  assert.match(board.body, /data-claim-live/);
+  assert.match(board.body, /data-open-seat/);
+  assert.match(studioMarkup(board.body), /class="studio studio-open-empty"/);
+  const boardStudio = studioMarkup(board.body);
+  assert.doesNotMatch(board.body, /Booked Co|Episode 12 is locked/);
+  assert.doesNotMatch(boardStudio, /data-host-open|data-claim-locked/);
+  assert.doesNotMatch(boardStudio, /data-waiting-on-host|Open Episode 13/);
+  assert.doesNotMatch(studioMarkup(board.body), /data-host-lock|data-checkout-state="locked"/);
+  assert.doesNotMatch(board.body, new RegExp(DEV_HOST_SESSION_SECRET));
+
+  const archive = await app.inject({ method: "GET", url: "/e/ep_html_lock" });
+  assert.equal(archive.statusCode, 200);
+  assert.match(archive.body, /Episode 12 is locked/);
+  assert.match(archive.body, /Booked Co/);
+  assert.match(studioMarkup(archive.body), /data-checkout-state="locked"/);
+  assert.match(studioMarkup(archive.body), /data-claim-locked/);
 
   const checkout = await app.inject({
     method: "POST",

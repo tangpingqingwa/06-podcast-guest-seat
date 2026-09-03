@@ -2,7 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { AppDb } from "../../db.js";
-import { getEpisode } from "../../episodes.js";
+import {
+  ensureCurrentOpenEpisodeWithinTransaction,
+  getEpisode,
+  isEpisodeLockDue,
+  rolloverEpisodeIfDue,
+} from "../../episodes.js";
 import { canonicalizeSiteUrl, HygieneError } from "../../hygiene.js";
 import { listListingsForEpisode, type Listing } from "../../listings.js";
 import {
@@ -367,44 +372,81 @@ function insertCheckoutIntent(
   const normalized = intentNormalizedPayload(intentId, draft, values);
   const normalizedPayload = stableJson(normalized);
   const fingerprint = sha256(normalizedPayload);
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
   const targetBidCents = usdToCents(draft.quote.nextUsd);
   const chargeCents = usdToCents(draft.quote.chargeUsd);
   const quoteBaseCents = targetBidCents - chargeCents;
-  db.prepare(
-    `INSERT INTO checkout_intents (
-       id, provider_checkout_id, provider_checkout_url, provider_expires_at,
-       episode_id, listing_id, board_window_key, kind, name, site_url, one_liner,
-       intent_fingerprint, normalized_payload, mode, expected_store_id,
-       expected_product_id, expected_currency, tax_category,
-       quote_base_cents, target_bid_cents, charge_cents,
-       amount_cents, currency, next_usd, status, paid_at,
-       provider_order_id, provider_payment_id, failure_code, created_at, updated_at
-     ) VALUES (?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'USD',
-       'digital_goods', ?, ?, ?, ?, 'USD', ?, 'creating', NULL, NULL, NULL, NULL, ?, ?)`
-  ).run(
-    intentId,
-    draft.episodeId,
-    draft.listingId,
-    draft.episodeId,
-    draft.quote.kind,
-    draft.name,
-    draft.siteUrl,
-    draft.oneLiner,
-    fingerprint,
-    normalizedPayload,
-    values.mode,
-    values.storeId,
-    values.productId,
-    quoteBaseCents,
-    targetBidCents,
-    chargeCents,
-    chargeCents,
-    draft.quote.nextUsd,
-    now,
-    now,
-  );
-  return { fingerprint, normalizedPayload };
+  const result = db
+    .transaction(() => {
+      const episode = getEpisode(db, draft.episodeId);
+      if (!episode) {
+        throw new CheckoutError("episode_not_found", "episode not found", 404);
+      }
+      if (episode.lockedAt) {
+        throw new CheckoutError("episode_locked", "episode is locked", 409);
+      }
+      // Read the clock after BEGIN IMMEDIATE has acquired SQLite's writer
+      // lock. A checkout that waited through the deadline must not reuse the
+      // pre-transaction timestamp and sneak an intent onto the old board.
+      const transactionNow = new Date();
+      if (isEpisodeLockDue(episode, transactionNow)) {
+        const lockedAt = episode.locksAt?.trim() || transactionNow.toISOString();
+        const expired = db
+          .prepare(
+            `UPDATE episodes SET locked_at = ?
+             WHERE id = ? AND locked_at IS NULL`,
+          )
+          .run(lockedAt, episode.id);
+        if (expired.changes !== 1) {
+          throw new CheckoutError("episode_locked", "episode is locked", 409);
+        }
+        // The expiry and the replacement board commit with the intent guard
+        // in one immediate transaction. The rejected checkout itself is not
+        // persisted and never reaches Waffo.
+        ensureCurrentOpenEpisodeWithinTransaction(db, {}, transactionNow);
+        return undefined;
+      }
+      db.prepare(
+        `INSERT INTO checkout_intents (
+           id, provider_checkout_id, provider_checkout_url, provider_expires_at,
+           episode_id, listing_id, board_window_key, kind, name, site_url, one_liner,
+           intent_fingerprint, normalized_payload, mode, expected_store_id,
+           expected_product_id, expected_currency, tax_category,
+           quote_base_cents, target_bid_cents, charge_cents,
+           amount_cents, currency, next_usd, status, paid_at,
+           provider_order_id, provider_payment_id, failure_code, created_at, updated_at
+         ) VALUES (?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'USD',
+           'digital_goods', ?, ?, ?, ?, 'USD', ?, 'creating', NULL, NULL, NULL, NULL, ?, ?)`
+      ).run(
+        intentId,
+        draft.episodeId,
+        draft.listingId,
+        draft.episodeId,
+        draft.quote.kind,
+        draft.name,
+        draft.siteUrl,
+        draft.oneLiner,
+        fingerprint,
+        normalizedPayload,
+        values.mode,
+        values.storeId,
+        values.productId,
+        quoteBaseCents,
+        targetBidCents,
+        chargeCents,
+        chargeCents,
+        draft.quote.nextUsd,
+        now,
+        now,
+      );
+      return { fingerprint, normalizedPayload };
+    })
+    .immediate();
+  if (!result) {
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
+  }
+  return result;
 }
 
 function markCheckoutIntentProviderFailure(
@@ -648,9 +690,18 @@ export function quoteCheckout(db: AppDb, body: CheckoutBody): CheckoutDraft {
   if (/[\r\n]/.test(oneLiner) || oneLiner.length > 140) {
     throw new CheckoutError("invalid_checkout", "oneLiner must be a single line of at most 140 characters");
   }
-  const episode = getEpisode(db, episodeId);
+  let episode = getEpisode(db, episodeId);
   if (!episode) throw new CheckoutError("episode_not_found", "episode not found", 404);
   if (episode.lockedAt) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (isEpisodeLockDue(episode)) {
+    episode = rolloverEpisodeIfDue(db, episodeId).episode;
+    if (!episode) {
+      throw new CheckoutError("episode_not_found", "episode not found", 404);
+    }
+  }
+  if (episode.lockedAt || isEpisodeLockDue(episode)) {
+    throw new CheckoutError("episode_locked", "episode is locked", 409);
+  }
   const siteUrl = canonicalizeSiteUrl(rawSiteUrl);
   const bidUsd = parseBidUsd(body.bidUsd);
   const listings = listListingsForEpisode(db, episodeId);
@@ -733,6 +784,7 @@ export function claimPaidCheckout(
   const episode = getEpisode(db, session.episodeId);
   if (!episode) throw new CheckoutError("episode_not_found", "episode not found", 404);
   if (episode.lockedAt) throw new CheckoutError("episode_locked", "episode is locked", 409);
+  if (isEpisodeLockDue(episode)) throw new CheckoutError("episode_locked", "episode is locked", 409);
   if (session.kind === "raise") {
     return applyPaidRaise(db, {
       episodeId: session.episodeId,

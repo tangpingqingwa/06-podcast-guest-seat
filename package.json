@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "start": "node --import tsx src/server.ts",
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-reporter spec 'tests/**/*.test.ts'"
   },

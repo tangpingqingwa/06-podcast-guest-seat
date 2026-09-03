@@ -88,38 +88,7 @@ export function nextEpisodeLabel(db: AppDb): string {
   return `Episode ${countEpisodes(db) + 1}`;
 }
 
-/** Open the next empty board. Refuses when an unlocked episode already exists. */
-export function openNextEpisode(
-  db: AppDb,
-  input: {
-    showId?: string;
-    label?: string;
-    seatKind?: SeatKind;
-    opensAt?: string;
-  } = {},
-): Episode {
-  const current = getCurrentEpisode(db);
-  if (current && current.lockedAt === null) {
-    throw new EpisodeError(
-      "episode_already_open",
-      "an unlocked episode already accepts bids",
-    );
-  }
-  const seatKind = input.seatKind ?? "guest_seat";
-  if (!isSeatKind(seatKind)) {
-    throw new EpisodeError("invalid_open", "seatKind must be guest_seat or sixty_second_open");
-  }
-  const showId = input.showId?.trim() || DEFAULT_SHOW_ID;
-  const label = input.label?.trim() || nextEpisodeLabel(db);
-  return createEpisode(db, {
-    showId,
-    label,
-    seatKind,
-    opensAt: input.opensAt?.trim() || new Date().toISOString(),
-  });
-}
-
-export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
+function insertEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
   if (!isSeatKind(input.seatKind)) {
     throw new Error(`invalid seatKind: ${input.seatKind}`);
   }
@@ -165,7 +134,175 @@ export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
   return episode;
 }
 
+/** Open the next empty board. Refuses when an unlocked episode already exists. */
+export function openNextEpisode(
+  db: AppDb,
+  input: {
+    showId?: string;
+    label?: string;
+    seatKind?: SeatKind;
+    opensAt?: string;
+  } = {},
+): Episode {
+  return db
+    .transaction(() => {
+      const current = getCurrentEpisode(db);
+      if (current && current.lockedAt === null) {
+        throw new EpisodeError(
+          "episode_already_open",
+          "an unlocked episode already accepts bids",
+        );
+      }
+      const seatKind = input.seatKind ?? "guest_seat";
+      if (!isSeatKind(seatKind)) {
+        throw new EpisodeError("invalid_open", "seatKind must be guest_seat or sixty_second_open");
+      }
+      const showId = input.showId?.trim() || DEFAULT_SHOW_ID;
+      const label = input.label?.trim() || nextEpisodeLabel(db);
+      return insertEpisode(db, {
+        showId,
+        label,
+        seatKind,
+        opensAt: input.opensAt?.trim() || new Date().toISOString(),
+      });
+    })
+    .immediate();
+}
+
+export function createEpisode(db: AppDb, input: CreateEpisodeInput): Episode {
+  return insertEpisode(db, input);
+}
+
 const EPISODE_COLUMNS = `id, show_id, label, seat_kind, veto_enabled, opens_at, locks_at, locked_at`;
+
+/**
+ * A scheduled lock is due at its exact ISO timestamp. Invalid or missing
+ * timestamps are left to the host/manual lock path rather than guessing.
+ */
+export function isEpisodeLockDue(episode: Episode, now: Date = new Date()): boolean {
+  if (episode.lockedAt !== null || !episode.locksAt?.trim()) {
+    return false;
+  }
+  const locksAt = Date.parse(episode.locksAt);
+  return Number.isFinite(locksAt) && locksAt <= now.getTime();
+}
+
+function getLatestUnlockedEpisode(db: AppDb): Episode | undefined {
+  const row = db
+    .prepare<[], EpisodeRow>(
+      `SELECT ${EPISODE_COLUMNS} FROM episodes
+       WHERE locked_at IS NULL
+       ORDER BY opens_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get();
+  return row ? mapEpisode(row) : undefined;
+}
+
+function expireEpisodeIfDueWithinTransaction(
+  db: AppDb,
+  episodeId: string,
+  now: Date,
+): Episode | undefined {
+  const episode = getEpisode(db, episodeId);
+  if (!episode || !isEpisodeLockDue(episode, now)) {
+    return episode;
+  }
+  const lockedAt = episode.locksAt?.trim() || now.toISOString();
+  const updated = db
+    .prepare(
+      `UPDATE episodes SET locked_at = ?
+       WHERE id = ? AND locked_at IS NULL`,
+    )
+    .run(lockedAt, episode.id);
+  if (updated.changes !== 1) {
+    throw new Error("episode expiry did not update");
+  }
+  return getEpisode(db, episode.id);
+}
+
+/**
+ * Transaction-internal form used by public GET and checkout boundaries. The
+ * caller must already hold an immediate transaction. It closes every due
+ * latest unlocked episode, then returns the existing open board or inserts
+ * one empty guest-seat board. Keeping this operation synchronous and local to
+ * SQLite makes a cold start and a scheduled rollover idempotent across
+ * multiple application connections.
+ */
+export function ensureCurrentOpenEpisodeWithinTransaction(
+  db: AppDb,
+  input: {
+    showId?: string;
+    seatKind?: SeatKind;
+    opensAt?: string;
+  } = {},
+  now: Date = new Date(),
+): Episode {
+  for (;;) {
+    const current = getLatestUnlockedEpisode(db);
+    if (!current) {
+      break;
+    }
+    if (!isEpisodeLockDue(current, now)) {
+      return current;
+    }
+    expireEpisodeIfDueWithinTransaction(db, current.id, now);
+  }
+
+  const seatKind = input.seatKind ?? "guest_seat";
+  if (!isSeatKind(seatKind)) {
+    throw new EpisodeError("invalid_open", "seatKind must be guest_seat or sixty_second_open");
+  }
+  return insertEpisode(db, {
+    showId: input.showId?.trim() || DEFAULT_SHOW_ID,
+    label: nextEpisodeLabel(db),
+    seatKind,
+    opensAt: input.opensAt?.trim() || now.toISOString(),
+  });
+}
+
+/**
+ * Close one scheduled episode if its deadline has passed, then ensure there
+ * is an open board. This is useful for direct episode URLs and checkout
+ * requests that arrive at the deadline instead of through `/` first.
+ */
+export function rolloverEpisodeIfDue(
+  db: AppDb,
+  episodeId: string,
+): { episode: Episode | undefined; current: Episode } {
+  return db
+    .transaction(() => {
+      const now = new Date();
+      expireEpisodeIfDueWithinTransaction(db, episodeId, now);
+      const current = ensureCurrentOpenEpisodeWithinTransaction(db, {}, now);
+      return { episode: getEpisode(db, episodeId), current };
+    })
+    .immediate();
+}
+
+/**
+ * Return the current unlocked episode, opening the next empty board when the
+ * database has no unlocked episode. The read and conditional insert share an
+ * immediate SQLite transaction so concurrent requests cannot create two
+ * public boards for the same gap.
+ */
+export function ensureCurrentOpenEpisode(
+  db: AppDb,
+  input: {
+    showId?: string;
+    seatKind?: SeatKind;
+    opensAt?: string;
+  } = {},
+): Episode {
+  return db
+    .transaction(() => {
+      return ensureCurrentOpenEpisodeWithinTransaction(db, input, new Date());
+    })
+    .immediate();
+}
+
+/** Short alias for callers that only need the public open-board guarantee. */
+export const ensureOpenEpisode = ensureCurrentOpenEpisode;
 
 /** Latest locked episode, optionally excluding one id (the current open board). */
 export function getLatestLockedEpisode(
@@ -203,16 +340,9 @@ export function getEpisode(db: AppDb, id: string): Episode | undefined {
 
 /** Unlocked episode with the latest opensAt, else the latest episode. */
 export function getCurrentEpisode(db: AppDb): Episode | undefined {
-  const unlocked = db
-    .prepare<[], EpisodeRow>(
-      `SELECT ${EPISODE_COLUMNS} FROM episodes
-       WHERE locked_at IS NULL
-       ORDER BY opens_at DESC, id DESC
-       LIMIT 1`,
-    )
-    .get();
+  const unlocked = getLatestUnlockedEpisode(db);
   if (unlocked) {
-    return mapEpisode(unlocked);
+    return unlocked;
   }
   const latest = db
     .prepare<[], EpisodeRow>(
