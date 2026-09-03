@@ -527,8 +527,8 @@ body > footer { padding: 0 0 32px; color: var(--muted-foreground); font-size: 12
   .claim-title { flex-wrap: wrap; justify-content: center; min-width: 0; min-height: 36px; font-size: 24px; line-height: 30px; letter-spacing: -0.055em; gap: 6px 8px; text-align: center; white-space: normal; }
   .claim-title > span:first-child { flex: 0 1 auto; max-width: 100%; }
   .bid-stepper { gap: 6px; }
-  .step { width: 22px; height: 22px; font-size: 14px; }
-  .step { flex-basis: 22px; }
+  .step { width: 44px; min-width: 44px; height: 44px; min-height: 44px; font-size: 16px; }
+  .step { flex-basis: 44px; }
   .bid-field input { width: 2ch; min-width: 2ch; }
   .bid-form { display: grid; gap: 8px; margin-top: 18px; }
   .fields { grid-template-columns: 1fr; gap: 8px; }
